@@ -21,6 +21,10 @@ const startServer = async () => {
       console.log("✓ Database models synced");
     }
 
+    // Auto-seed admin
+    const { seedAdmin } = await import("./src/utils/seedAdmin.js");
+    await seedAdmin();
+
     // Start Express server
     app.listen(PORT, () => {
       console.log(`✓ Server running on http://localhost:${PORT}`);
