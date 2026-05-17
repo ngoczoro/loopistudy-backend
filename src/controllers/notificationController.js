@@ -1,27 +1,47 @@
-import { initializeModels } from "../models/index.js";
+import * as notificationService from "../services/notificationService.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
+import { buildSuccessResponse, getPaginationParams, buildPaginationResponse } from "../utils/response.js";
 
-const models = initializeModels();
-const { Notification } = models;
+export const create = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await notificationService.create(userId, req.body);
+  res.status(201).json(buildSuccessResponse("Notification created successfully", result));
+});
 
-export const getNotifications = async (req, res, next) => {
-  try {
-    const notifications = await Notification.findAll({ where: { userId: req.user.userId } });
-    res.json({ success: true, data: notifications });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getAll = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { page, limit, offset } = getPaginationParams(req.query);
+  const filters = { ...req.query };
+  delete filters.page;
+  delete filters.limit;
 
-export const markAsRead = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const notification = await Notification.findOne({ where: { id, userId: req.user.userId } });
-    if (!notification) throw new ApiError(404, "Notification not found");
+  const { count, rows } = await notificationService.getAll(userId, limit, offset, filters);
+  const pagination = buildPaginationResponse(rows, count, page, limit);
 
-    await notification.update({ isRead: true, readAt: new Date() });
-    res.json({ success: true, data: notification });
-  } catch (error) {
-    next(error);
-  }
-};
+  res.json(buildSuccessResponse("Notifications fetched successfully", pagination.data, pagination.pagination));
+});
+
+export const getById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const result = await notificationService.getById(userId, id);
+  if (!result) throw ApiError.notFound("Notification not found or you don't have permission");
+  res.json(buildSuccessResponse("Notification fetched successfully", result));
+});
+
+export const update = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const result = await notificationService.update(userId, id, req.body);
+  if (!result) throw ApiError.notFound("Notification not found or you don't have permission");
+  res.json(buildSuccessResponse("Notification updated successfully", result));
+});
+
+export const remove = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const success = await notificationService.remove(userId, id);
+  if (!success) throw ApiError.notFound("Notification not found or you don't have permission");
+  res.json(buildSuccessResponse("Notification deleted successfully"));
+});

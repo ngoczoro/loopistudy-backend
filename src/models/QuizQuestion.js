@@ -1,49 +1,52 @@
 import { DataTypes } from 'sequelize';
 
-export default (sequelize) => {
-  const QuizQuestion = sequelize.define('QuizQuestion', {
+export const defineQuizQuestionModel = (sequelize) => {
+  return sequelize.define('QuizQuestion', {
     id: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-      autoIncrement: true,
     },
     quizId: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
       allowNull: false,
       field: 'quiz_id',
     },
     questionText: {
       type: DataTypes.TEXT,
-      allowNull: false,
       field: 'question_text',
     },
-    questionType: {
-      type: DataTypes.ENUM('multiple_choice', 'true_false', 'short_answer'),
-      defaultValue: 'multiple_choice',
-      field: 'question_type',
+    optionA: {
+      type: DataTypes.TEXT,
+      field: 'option_a',
+    },
+    optionB: {
+      type: DataTypes.TEXT,
+      field: 'option_b',
+    },
+    optionC: {
+      type: DataTypes.TEXT,
+      field: 'option_c',
+    },
+    optionD: {
+      type: DataTypes.TEXT,
+      field: 'option_d',
+    },
+    correctAnswer: {
+      type: DataTypes.CHAR(1),
+      field: 'correct_answer',
     },
     explanation: {
       type: DataTypes.TEXT,
-    },
-    questionOrder: {
-      type: DataTypes.INTEGER,
-      field: 'question_order',
-    },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'created_at',
-    },
-    updatedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'updated_at',
+      field: 'explanation_text',
     },
   }, {
     tableName: 'quiz_questions',
+    schema: 'learning_app',
     timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     underscored: true,
-  });
 
-  return QuizQuestion;
+  });
 };

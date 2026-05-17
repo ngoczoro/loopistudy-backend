@@ -1,158 +1,127 @@
 import sequelize from "../config/database.js";
 import { defineUserModel } from "./User.js";
 import { defineSubjectModel } from "./Subject.js";
+import { defineDocumentModel } from "./Document.js";
+import { defineNoteModel } from "./Note.js";
+import { defineQuizModel } from "./Quiz.js";
+import { defineQuizQuestionModel } from "./QuizQuestion.js";
+import { defineQuizAttemptModel } from "./QuizAttempt.js";
+import { defineQuizAnswerModel } from "./QuizAnswer.js";
+import { defineTaskModel } from "./Task.js";
 import { defineStudyPlanModel } from "./StudyPlan.js";
 import { defineStudySessionModel } from "./StudySession.js";
 import { definePomodoroSessionModel } from "./PomodoroSession.js";
-import { defineEmailOtpModel } from "./EmailOtp.js";
-
-import defineNoteModel from "./Note.js";
-import defineNoteTagModel from "./NoteTag.js";
-import defineQuizModel from "./Quiz.js";
-import defineQuizQuestionModel from "./QuizQuestion.js";
-import defineQuizQuestionOptionModel from "./QuizQuestionOption.js";
-import defineQuizAttemptModel from "./QuizAttempt.js";
-import defineQuizAttemptAnswerModel from "./QuizAttemptAnswer.js";
-import defineGoalModel from "./Goal.js";
-import defineGoalProgressModel from "./GoalProgress.js";
-import defineStreakModel from "./Streak.js";
-import defineAchievementModel from "./Achievement.js";
-import defineUserAchievementModel from "./UserAchievement.js";
-import defineNotificationModel from "./Notification.js";
-import defineUserWarningModel from "./UserWarning.js";
-import defineAdminLogModel from "./AdminLog.js";
-import defineRefreshTokenModel from "./RefreshToken.js";
-import defineAnnouncementModel from "./Announcement.js";
+import { defineStudyGoalModel } from "./StudyGoal.js";
+import { defineStreakModel } from "./Streak.js";
+import { defineNotificationModel } from "./Notification.js";
+import { defineAIRequestModel } from "./AIRequest.js";
+import { defineViolationModel } from "./Violation.js";
+import { defineRefreshTokenModel } from "./RefreshToken.js";
+import { defineOtpCodeModel } from "./OtpCode.js";
 
 export const initializeModels = () => {
   const models = {
     User: defineUserModel(sequelize),
     Subject: defineSubjectModel(sequelize),
+    Document: defineDocumentModel(sequelize),
+    Note: defineNoteModel(sequelize),
+    Quiz: defineQuizModel(sequelize),
+    QuizQuestion: defineQuizQuestionModel(sequelize),
+    QuizAttempt: defineQuizAttemptModel(sequelize),
+    QuizAnswer: defineQuizAnswerModel(sequelize),
+    Task: defineTaskModel(sequelize),
     StudyPlan: defineStudyPlanModel(sequelize),
     StudySession: defineStudySessionModel(sequelize),
     PomodoroSession: definePomodoroSessionModel(sequelize),
-    EmailOtp: defineEmailOtpModel(sequelize),
-    Note: defineNoteModel(sequelize),
-    NoteTag: defineNoteTagModel(sequelize),
-    Quiz: defineQuizModel(sequelize),
-    QuizQuestion: defineQuizQuestionModel(sequelize),
-    QuizQuestionOption: defineQuizQuestionOptionModel(sequelize),
-    QuizAttempt: defineQuizAttemptModel(sequelize),
-    QuizAttemptAnswer: defineQuizAttemptAnswerModel(sequelize),
-    Goal: defineGoalModel(sequelize),
-    GoalProgress: defineGoalProgressModel(sequelize),
+    StudyGoal: defineStudyGoalModel(sequelize),
     Streak: defineStreakModel(sequelize),
-    Achievement: defineAchievementModel(sequelize),
-    UserAchievement: defineUserAchievementModel(sequelize),
     Notification: defineNotificationModel(sequelize),
-    UserWarning: defineUserWarningModel(sequelize),
-    AdminLog: defineAdminLogModel(sequelize),
+    AIRequest: defineAIRequestModel(sequelize),
+    Violation: defineViolationModel(sequelize),
     RefreshToken: defineRefreshTokenModel(sequelize),
-    Announcement: defineAnnouncementModel(sequelize),
+    EmailOtp: defineOtpCodeModel(sequelize), // alias as EmailOtp for backwards compatibility in authController
   };
 
-  setupAssociations(models);
-  return models;
-};
-
-const setupAssociations = (models) => {
   const {
-    User, Subject, StudyPlan, StudySession, PomodoroSession, EmailOtp,
-    Note, NoteTag, Quiz, QuizQuestion, QuizQuestionOption, QuizAttempt, QuizAttemptAnswer,
-    Goal, GoalProgress, Streak, Achievement, UserAchievement, Notification, UserWarning,
-    AdminLog, RefreshToken, Announcement
+    User, Subject, Document, Note, Quiz, QuizQuestion, QuizAttempt, QuizAnswer,
+    Task, StudyPlan, StudySession, PomodoroSession, StudyGoal, Streak,
+    Notification, AIRequest, RefreshToken, Violation, EmailOtp
   } = models;
 
-  // User associations
-  User.hasMany(Subject, { foreignKey: "userId", as: "subjects", onDelete: "CASCADE" });
-  User.hasMany(StudyPlan, { foreignKey: "userId", as: "studyPlans", onDelete: "CASCADE" });
-  User.hasMany(StudySession, { foreignKey: "userId", as: "studySessions", onDelete: "CASCADE" });
-  User.hasMany(PomodoroSession, { foreignKey: "userId", as: "pomodoroSessions", onDelete: "CASCADE" });
-  User.hasMany(EmailOtp, { foreignKey: "userId", as: "emailOtps", onDelete: "CASCADE" });
-  User.hasMany(Note, { foreignKey: "userId", as: "notes", onDelete: "CASCADE" });
-  User.hasMany(Goal, { foreignKey: "userId", as: "goals", onDelete: "CASCADE" });
-  User.hasMany(QuizAttempt, { foreignKey: "userId", as: "quizAttempts", onDelete: "CASCADE" });
-  User.hasMany(UserWarning, { foreignKey: "userId", as: "warnings", onDelete: "CASCADE" });
-  User.hasMany(Notification, { foreignKey: "userId", as: "notifications", onDelete: "CASCADE" });
-  User.hasMany(RefreshToken, { foreignKey: "userId", as: "refreshTokens", onDelete: "CASCADE" });
-  User.hasMany(AdminLog, { foreignKey: "adminId", as: "adminLogs" });
-  User.hasOne(Streak, { foreignKey: "userId", as: "streak", onDelete: "CASCADE" });
-  User.belongsToMany(Achievement, { through: UserAchievement, foreignKey: 'userId', as: 'achievements' });
+  // --- USER ASSOCIATIONS ---
+  User.hasMany(Subject, { foreignKey: 'user_id', as: 'subjects' });
+  User.hasMany(Document, { foreignKey: 'user_id', as: 'documents' });
+  User.hasMany(Task, { foreignKey: 'user_id', as: 'tasks' });
+  User.hasMany(PomodoroSession, { foreignKey: 'user_id', as: 'pomodoroSessions' });
+  User.hasMany(Notification, { foreignKey: 'user_id', as: 'notifications' });
+  User.hasMany(QuizAttempt, { foreignKey: 'user_id', as: 'quizAttempts' });
+  User.hasMany(Quiz, { foreignKey: 'user_id', as: 'quizzes' });
+  User.hasMany(AIRequest, { foreignKey: 'user_id', as: 'aiRequests' });
+  User.hasMany(RefreshToken, { foreignKey: 'user_id', as: 'refreshTokens' });
+  User.hasMany(EmailOtp, { foreignKey: 'user_id', as: 'emailOtps' });
+  User.hasOne(StudyGoal, { foreignKey: 'user_id', as: 'studyGoal' });
+  User.hasOne(Streak, { foreignKey: 'user_id', as: 'streak' });
 
-  // Subject associations
-  Subject.belongsTo(User, { foreignKey: "userId", as: "user" });
-  Subject.hasMany(StudySession, { foreignKey: "subjectId", as: "sessions", onDelete: "CASCADE" });
-  Subject.hasMany(Note, { foreignKey: "subjectId", as: "notes", onDelete: "CASCADE" });
-  Subject.hasMany(Quiz, { foreignKey: "subjectId", as: "quizzes", onDelete: "CASCADE" });
+  // --- SUBJECT ASSOCIATIONS ---
+  Subject.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  Subject.hasMany(Document, { foreignKey: 'subject_id', as: 'documents' });
+  Subject.hasMany(Task, { foreignKey: 'subject_id', as: 'tasks' });
+  Subject.hasMany(StudyPlan, { foreignKey: 'subject_id', as: 'studyPlans' });
+  Subject.hasMany(PomodoroSession, { foreignKey: 'subject_id', as: 'pomodoroSessions' });
 
-  // StudyPlan
-  StudyPlan.belongsTo(User, { foreignKey: "userId", as: "user" });
-  StudyPlan.hasMany(StudySession, { foreignKey: "studyPlanId", as: "sessions", onDelete: "SET NULL" });
+  // --- DOCUMENT ASSOCIATIONS ---
+  Document.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  Document.belongsTo(Subject, { foreignKey: 'subject_id', as: 'subject' });
+  Document.hasMany(Note, { foreignKey: 'document_id', as: 'notes' });
+  Document.hasMany(Quiz, { foreignKey: 'document_id', as: 'quizzes' });
+  Document.hasMany(AIRequest, { foreignKey: 'document_id', as: 'aiRequests' });
 
-  // StudySession
-  StudySession.belongsTo(User, { foreignKey: "userId", as: "user" });
-  StudySession.belongsTo(StudyPlan, { foreignKey: "studyPlanId", as: "studyPlan" });
-  StudySession.belongsTo(Subject, { foreignKey: "subjectId", as: "subject" });
-  StudySession.hasMany(PomodoroSession, { foreignKey: "studySessionId", as: "pomodoroSessions", onDelete: "CASCADE" });
+  // --- NOTE ASSOCIATIONS ---
+  Note.belongsTo(Document, { foreignKey: 'document_id', as: 'document' });
+  Note.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
-  // PomodoroSession
-  PomodoroSession.belongsTo(User, { foreignKey: "userId", as: "user" });
-  PomodoroSession.belongsTo(StudySession, { foreignKey: "studySessionId", as: "studySession" });
+  // --- QUIZ ASSOCIATIONS ---
+  Quiz.belongsTo(Document, { foreignKey: 'document_id', as: 'document' });
+  Quiz.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  Quiz.hasMany(QuizQuestion, { foreignKey: 'quiz_id', as: 'questions' });
+  Quiz.hasMany(QuizAttempt, { foreignKey: 'quiz_id', as: 'attempts' });
 
-  // EmailOtp
-  EmailOtp.belongsTo(User, { foreignKey: "userId", as: "user", onDelete: "CASCADE" });
+  QuizQuestion.belongsTo(Quiz, { foreignKey: 'quiz_id', as: 'quiz' });
+  QuizQuestion.hasMany(QuizAnswer, { foreignKey: 'question_id', as: 'answers' });
+  
+  QuizAttempt.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  QuizAttempt.belongsTo(Quiz, { foreignKey: 'quiz_id', as: 'quiz' });
+  QuizAttempt.hasMany(QuizAnswer, { foreignKey: 'attempt_id', as: 'answers' });
+  
+  QuizAnswer.belongsTo(QuizAttempt, { foreignKey: 'attempt_id', as: 'attempt' });
+  QuizAnswer.belongsTo(QuizQuestion, { foreignKey: 'question_id', as: 'question' });
 
-  // Note
-  Note.belongsTo(User, { foreignKey: "userId", as: "user" });
-  Note.belongsTo(Subject, { foreignKey: "subjectId", as: "subject" });
-  Note.hasMany(NoteTag, { foreignKey: "noteId", as: "tags", onDelete: "CASCADE" });
-  NoteTag.belongsTo(Note, { foreignKey: "noteId", as: "note" });
+  // --- TASK ASSOCIATIONS ---
+  Task.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  Task.belongsTo(Subject, { foreignKey: 'subject_id', as: 'subject' });
 
-  // Quiz
-  Quiz.belongsTo(Subject, { foreignKey: "subjectId", as: "subject" });
-  Quiz.belongsTo(User, { foreignKey: "createdByAdminId", as: "createdByAdmin" });
-  Quiz.hasMany(QuizQuestion, { foreignKey: "quizId", as: "questions", onDelete: "CASCADE" });
-  Quiz.hasMany(QuizAttempt, { foreignKey: "quizId", as: "attempts", onDelete: "CASCADE" });
+  // --- STUDY PLAN & SESSION ---
+  StudyPlan.belongsTo(Subject, { foreignKey: 'subject_id', as: 'subject' });
+  StudyPlan.hasMany(StudySession, { foreignKey: 'study_plan_id', as: 'sessions' });
+  StudySession.belongsTo(StudyPlan, { foreignKey: 'study_plan_id', as: 'studyPlan' });
 
-  // QuizQuestion
-  QuizQuestion.belongsTo(Quiz, { foreignKey: "quizId", as: "quiz" });
-  QuizQuestion.hasMany(QuizQuestionOption, { foreignKey: "questionId", as: "options", onDelete: "CASCADE" });
-  QuizQuestionOption.belongsTo(QuizQuestion, { foreignKey: "questionId", as: "question" });
+  // --- POMODORO ---
+  PomodoroSession.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  PomodoroSession.belongsTo(Subject, { foreignKey: 'subject_id', as: 'subject' });
 
-  // QuizAttempt
-  QuizAttempt.belongsTo(User, { foreignKey: "userId", as: "user" });
-  QuizAttempt.belongsTo(Quiz, { foreignKey: "quizId", as: "quiz" });
-  QuizAttempt.hasMany(QuizAttemptAnswer, { foreignKey: "attemptId", as: "answers", onDelete: "CASCADE" });
-  QuizAttemptAnswer.belongsTo(QuizAttempt, { foreignKey: "attemptId", as: "attempt" });
-  QuizAttemptAnswer.belongsTo(QuizQuestion, { foreignKey: "questionId", as: "question" });
-  QuizAttemptAnswer.belongsTo(QuizQuestionOption, { foreignKey: "selectedOptionId", as: "selectedOption" });
+  // --- OTHERS ---
+  StudyGoal.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  Streak.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  Notification.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  AIRequest.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  AIRequest.belongsTo(Document, { foreignKey: 'document_id', as: 'document' });
+  RefreshToken.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  EmailOtp.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
-  // Goal
-  Goal.belongsTo(User, { foreignKey: "userId", as: "user" });
-  Goal.hasMany(GoalProgress, { foreignKey: "goalId", as: "progress", onDelete: "CASCADE" });
-  GoalProgress.belongsTo(Goal, { foreignKey: "goalId", as: "goal" });
+  // Alias for backward compatibility in authController
+  sequelize.models.EmailOtp = sequelize.models.OtpCode;
 
-  // Streak
-  Streak.belongsTo(User, { foreignKey: "userId", as: "user" });
-
-  // Achievement
-  Achievement.belongsToMany(User, { through: UserAchievement, foreignKey: 'achievementId', as: 'users' });
-
-  // Notification
-  Notification.belongsTo(User, { foreignKey: "userId", as: "user" });
-
-  // UserWarning
-  UserWarning.belongsTo(User, { foreignKey: "userId", as: "user" });
-  UserWarning.belongsTo(User, { foreignKey: "issuedByAdminId", as: "issuedByAdmin" });
-
-  // AdminLog
-  AdminLog.belongsTo(User, { foreignKey: "adminId", as: "admin" });
-
-  // RefreshToken
-  RefreshToken.belongsTo(User, { foreignKey: "userId", as: "user" });
-
-  // Announcement
-  Announcement.belongsTo(User, { foreignKey: "createdByAdminId", as: "createdByAdmin" });
+  return models;
 };
 
 export default sequelize;

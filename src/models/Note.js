@@ -1,55 +1,32 @@
 import { DataTypes } from 'sequelize';
 
-export default (sequelize) => {
-  const Note = sequelize.define('Note', {
+export const defineNoteModel = (sequelize) => {
+  return sequelize.define('Note', {
     id: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-      autoIncrement: true,
+    },
+    documentId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      field: 'document_id',
     },
     userId: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
       allowNull: false,
       field: 'user_id',
     },
-    subjectId: {
-      type: DataTypes.BIGINT,
-      allowNull: false,
-      field: 'subject_id',
-    },
-    title: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
-    },
     content: {
       type: DataTypes.TEXT,
-      allowNull: false,
-    },
-    isPinned: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      field: 'is_pinned',
-    },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'created_at',
-    },
-    updatedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'updated_at',
-    },
-    deletedAt: {
-      type: DataTypes.DATE,
-      field: 'deleted_at',
     },
   }, {
     tableName: 'notes',
+    schema: 'learning_app',
     timestamps: true,
-    paranoid: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     underscored: true,
-  });
 
-  return Note;
+  });
 };

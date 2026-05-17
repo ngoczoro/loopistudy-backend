@@ -1,26 +1,47 @@
-import { initializeModels } from "../models/index.js";
+import * as goalService from "../services/goalService.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
+import { buildSuccessResponse, getPaginationParams, buildPaginationResponse } from "../utils/response.js";
 
-const models = initializeModels();
-const { Goal } = models;
+export const create = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await goalService.create(userId, req.body);
+  res.status(201).json(buildSuccessResponse("StudyGoal created successfully", result));
+});
 
-export const getGoals = async (req, res, next) => {
-  try {
-    const goals = await Goal.findAll({ where: { userId: req.user.userId } });
-    res.json({ success: true, data: goals });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getAll = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { page, limit, offset } = getPaginationParams(req.query);
+  const filters = { ...req.query };
+  delete filters.page;
+  delete filters.limit;
 
-export const createGoal = async (req, res, next) => {
-  try {
-    const goal = await Goal.create({
-      ...req.body,
-      userId: req.user.userId,
-    });
-    res.status(201).json({ success: true, data: goal });
-  } catch (error) {
-    next(error);
-  }
-};
+  const { count, rows } = await goalService.getAll(userId, limit, offset, filters);
+  const pagination = buildPaginationResponse(rows, count, page, limit);
+
+  res.json(buildSuccessResponse("StudyGoals fetched successfully", pagination.data, pagination.pagination));
+});
+
+export const getById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const result = await goalService.getById(userId, id);
+  if (!result) throw ApiError.notFound("StudyGoal not found or you don't have permission");
+  res.json(buildSuccessResponse("StudyGoal fetched successfully", result));
+});
+
+export const update = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const result = await goalService.update(userId, id, req.body);
+  if (!result) throw ApiError.notFound("StudyGoal not found or you don't have permission");
+  res.json(buildSuccessResponse("StudyGoal updated successfully", result));
+});
+
+export const remove = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const success = await goalService.remove(userId, id);
+  if (!success) throw ApiError.notFound("StudyGoal not found or you don't have permission");
+  res.json(buildSuccessResponse("StudyGoal deleted successfully"));
+});

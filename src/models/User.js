@@ -5,75 +5,44 @@ export const defineUserModel = (sequelize) => {
     "User",
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
-        autoIncrement: true,
+      },
+      fullName: {
+        type: DataTypes.STRING(100),
+        field: "name",
       },
       email: {
-        type: DataTypes.STRING(255),
-        unique: true,
+        type: DataTypes.STRING(150),
         allowNull: false,
-        validate: {
-          isEmail: true,
-          notEmpty: true,
-        },
+        unique: true,
       },
       passwordHash: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.TEXT,
         allowNull: false,
         field: "password_hash",
       },
-      fullName: {
-        type: DataTypes.STRING(255),
-        field: "full_name",
-      },
       avatarUrl: {
-        type: DataTypes.STRING(500),
+        type: DataTypes.TEXT,
         field: "avatar_url",
       },
       role: {
-        type: DataTypes.ENUM("user", "admin"),
-        defaultValue: "user",
+        type: DataTypes.STRING(50),
+        defaultValue: "USER",
       },
       status: {
-        type: DataTypes.ENUM(
-          "pending",
-          "active",
-          "warned",
-          "banned",
-          "inactive",
-        ),
-        defaultValue: "pending",
-      },
-      lastLoginAt: {
-        type: DataTypes.DATE,
-        field: "last_login_at",
-      },
-      createdAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        field: "created_at",
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        field: "updated_at",
-      },
-      deletedAt: {
-        type: DataTypes.DATE,
-        field: "deleted_at",
+        type: DataTypes.STRING(50),
+        defaultValue: "PENDING",
       },
     },
     {
       tableName: "users",
+      schema: "learning_app",
       timestamps: true,
-      paranoid: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
       underscored: true,
-      indexes: [
-        { fields: ["email"] },
-        { fields: ["role"] },
-        { fields: ["status"] },
-      ],
     },
   );
 };

@@ -1,52 +1,46 @@
 import { DataTypes } from 'sequelize';
 
-export default (sequelize) => {
-  const Notification = sequelize.define('Notification', {
+export const defineNotificationModel = (sequelize) => {
+  return sequelize.define('Notification', {
     id: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-      autoIncrement: true,
     },
     userId: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
       allowNull: false,
       field: 'user_id',
     },
     title: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.STRING(200),
       allowNull: false,
     },
     message: {
       type: DataTypes.TEXT,
-      allowNull: false,
     },
-    notificationType: {
-      type: DataTypes.ENUM('reminder', 'alert', 'achievement', 'warning', 'announcement'),
-      field: 'notification_type',
-    },
-    actionUrl: {
-      type: DataTypes.STRING(500),
-      field: 'action_url',
+    type: {
+      type: DataTypes.STRING(50),
     },
     isRead: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       field: 'is_read',
     },
-    readAt: {
-      type: DataTypes.DATE,
-      field: 'read_at',
+    relatedUserId: {
+      type: DataTypes.UUID,
+      field: 'related_user_id',
     },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'created_at',
+    level: {
+      type: DataTypes.STRING(50),
     },
   }, {
     tableName: 'notifications',
-    timestamps: false,
+    schema: 'learning_app',
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     underscored: true,
-  });
 
-  return Notification;
+  });
 };

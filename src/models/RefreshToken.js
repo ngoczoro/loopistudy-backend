@@ -1,20 +1,19 @@
 import { DataTypes } from 'sequelize';
 
-export default (sequelize) => {
-  const RefreshToken = sequelize.define('RefreshToken', {
+export const defineRefreshTokenModel = (sequelize) => {
+  return sequelize.define('RefreshToken', {
     id: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-      autoIncrement: true,
     },
     userId: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
       allowNull: false,
       field: 'user_id',
     },
     tokenHash: {
-      type: DataTypes.STRING(255),
-      unique: true,
+      type: DataTypes.TEXT,
       allowNull: false,
       field: 'token_hash',
     },
@@ -27,20 +26,13 @@ export default (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
-    revokedAt: {
-      type: DataTypes.DATE,
-      field: 'revoked_at',
-    },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'created_at',
-    },
   }, {
     tableName: 'refresh_tokens',
-    timestamps: false,
+    schema: 'learning_app',
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     underscored: true,
-  });
 
-  return RefreshToken;
+  });
 };

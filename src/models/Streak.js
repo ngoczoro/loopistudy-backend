@@ -1,47 +1,38 @@
 import { DataTypes } from 'sequelize';
 
-export default (sequelize) => {
-  const Streak = sequelize.define('Streak', {
+export const defineStreakModel = (sequelize) => {
+  return sequelize.define('Streak', {
     id: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-      autoIncrement: true,
     },
     userId: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
       allowNull: false,
-      unique: true,
       field: 'user_id',
     },
-    currentStreakDays: {
+    currentStreak: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
-      field: 'current_streak_days',
+      field: 'current_streak',
     },
-    longestStreakDays: {
+    longestStreak: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
-      field: 'longest_streak_days',
+      field: 'longest_streak',
     },
-    lastActivityDate: {
+    lastStudyDate: {
       type: DataTypes.DATEONLY,
-      field: 'last_activity_date',
-    },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'created_at',
-    },
-    updatedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'updated_at',
+      field: 'last_study_date',
     },
   }, {
     tableName: 'streaks',
+    schema: 'learning_app',
     timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     underscored: true,
-  });
 
-  return Streak;
+  });
 };

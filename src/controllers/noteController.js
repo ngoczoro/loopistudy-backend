@@ -1,56 +1,47 @@
-import { initializeModels } from "../models/index.js";
+import * as noteService from "../services/noteService.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
+import { buildSuccessResponse, getPaginationParams, buildPaginationResponse } from "../utils/response.js";
 
-const models = initializeModels();
-const { Note, NoteTag } = models;
+export const create = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await noteService.create(userId, req.body);
+  res.status(201).json(buildSuccessResponse("Note created successfully", result));
+});
 
-export const getNotes = async (req, res, next) => {
-  try {
-    const notes = await Note.findAll({ where: { userId: req.user.userId } });
-    res.json({ success: true, data: notes });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getAll = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { page, limit, offset } = getPaginationParams(req.query);
+  const filters = { ...req.query };
+  delete filters.page;
+  delete filters.limit;
 
-export const createNote = async (req, res, next) => {
-  try {
-    const { subjectId, title, content, isPinned } = req.body;
-    const note = await Note.create({
-      userId: req.user.userId,
-      subjectId,
-      title,
-      content,
-      isPinned,
-    });
-    res.status(201).json({ success: true, data: note });
-  } catch (error) {
-    next(error);
-  }
-};
+  const { count, rows } = await noteService.getAll(userId, limit, offset, filters);
+  const pagination = buildPaginationResponse(rows, count, page, limit);
 
-export const updateNote = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const note = await Note.findOne({ where: { id, userId: req.user.userId } });
-    if (!note) throw new ApiError(404, "Note not found");
-    
-    await note.update(req.body);
-    res.json({ success: true, data: note });
-  } catch (error) {
-    next(error);
-  }
-};
+  res.json(buildSuccessResponse("Notes fetched successfully", pagination.data, pagination.pagination));
+});
 
-export const deleteNote = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const note = await Note.findOne({ where: { id, userId: req.user.userId } });
-    if (!note) throw new ApiError(404, "Note not found");
+export const getById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const result = await noteService.getById(userId, id);
+  if (!result) throw ApiError.notFound("Note not found or you don't have permission");
+  res.json(buildSuccessResponse("Note fetched successfully", result));
+});
 
-    await note.destroy();
-    res.json({ success: true, message: "Note deleted successfully" });
-  } catch (error) {
-    next(error);
-  }
-};
+export const update = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const result = await noteService.update(userId, id, req.body);
+  if (!result) throw ApiError.notFound("Note not found or you don't have permission");
+  res.json(buildSuccessResponse("Note updated successfully", result));
+});
+
+export const remove = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const success = await noteService.remove(userId, id);
+  if (!success) throw ApiError.notFound("Note not found or you don't have permission");
+  res.json(buildSuccessResponse("Note deleted successfully"));
+});

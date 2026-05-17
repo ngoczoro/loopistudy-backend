@@ -30,22 +30,34 @@ export const register = asyncHandler(async (req, res) => {
   const { User, EmailOtp } = getModels();
 
   // Check if email already exists
-  const existingUser = await User.findOne({ where: { email } });
-  if (existingUser) {
-    throw ApiError.conflict("Email already registered");
+  console.log("EMAIL:", email);
+
+  let user = await User.findOne({ where: { email } });
+  
+  if (user) {
+    if (user.status === "PENDING") {
+      // User is pending, allow re-registration by updating details
+      const passwordHash = await hashPassword(password);
+      await user.update({
+        passwordHash,
+        fullName,
+      });
+    } else {
+      throw ApiError.conflict("Email already registered");
+    }
+  } else {
+    // Hash password
+    const passwordHash = await hashPassword(password);
+  
+    // Create user with pending status
+    user = await User.create({
+      email,
+      passwordHash,
+      fullName,
+      role: "USER",
+      status: "PENDING", // User cannot login until OTP verified
+    });
   }
-
-  // Hash password
-  const passwordHash = await hashPassword(password);
-
-  // Create user with pending status
-  const user = await User.create({
-    email,
-    passwordHash,
-    fullName,
-    role: "user",
-    status: "pending", // User cannot login until OTP verified
-  });
 
   // Generate OTP
   const otp = generateOTP();
@@ -63,6 +75,11 @@ export const register = asyncHandler(async (req, res) => {
     expiresAt,
     userId: user.id,
   });
+
+  // Log OTP to console for development
+  console.log(`\n======================================`);
+  console.log(`🔑 OTP CODE FOR ${email}: ${otp}`);
+  console.log(`======================================\n`);
 
   // Send OTP email
   try {
@@ -104,7 +121,7 @@ export const resendOtp = asyncHandler(async (req, res) => {
   }
 
   // Can only resend if user is pending
-  if (user.status !== "pending") {
+  if (user.status !== "PENDING") {
     throw ApiError.badRequest("OTP resend only available for pending users");
   }
 
@@ -162,14 +179,14 @@ export const verifyOtp = asyncHandler(async (req, res) => {
   }
 
   // Check if already verified
-  if (user.status === "active") {
+  if (user.status === "ACTIVE") {
     throw ApiError.badRequest("User already verified. Please login.");
   }
 
   // Find latest OTP for this email
   const otpRecord = await EmailOtp.findOne({
     where: { email, isUsed: false },
-    order: [["createdAt", "DESC"]],
+    order: [["created_at", "DESC"]],
   });
 
   if (!otpRecord) {
@@ -205,12 +222,12 @@ export const verifyOtp = asyncHandler(async (req, res) => {
   });
 
   // Update user status to active
-  await user.update({ status: "active" });
+  await user.update({ status: "ACTIVE" });
 
   res.json(
     buildSuccessResponse("Email verified successfully. You can now login.", {
       email,
-      status: "active",
+      status: "ACTIVE",
       message: "User verified. Ready to login.",
     }),
   );
@@ -237,13 +254,13 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   // Check if user is verified
-  if (user.status === "pending") {
+  if (user.status === "PENDING") {
     throw ApiError.badRequest(
       "Please verify your email with OTP before logging in",
     );
   }
 
-  if (user.status === "banned") {
+  if (user.status === "BANNED") {
     throw ApiError.forbidden("Your account has been banned");
   }
 
@@ -256,8 +273,8 @@ export const login = asyncHandler(async (req, res) => {
   // Generate tokens
   const { accessToken, refreshToken } = generateTokens(user.id, user.role);
 
-  // Update last login
-  await user.update({ lastLoginAt: new Date() });
+  // Update last login (Disabled as field does not exist in User model)
+  // await user.update({ lastLoginAt: new Date() });
 
   res.json(
     buildSuccessResponse("Login successful", {
@@ -299,12 +316,12 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 
   // Verify user still exists and is active
-  const user = await User.findByPk(req.user.userId);
+  const user = await User.findByPk(req.user.id);
   if (!user) {
     throw ApiError.unauthorized("User not found");
   }
 
-  if (user.status === "banned") {
+  if (user.status === "BANNED") {
     throw ApiError.forbidden("Your account has been banned");
   }
 
@@ -372,7 +389,7 @@ export const verifyResetOtp = asyncHandler(async (req, res) => {
   // Find latest unused OTP
   const otpRecord = await EmailOtp.findOne({
     where: { email, isUsed: false },
-    order: [["createdAt", "DESC"]],
+    order: [["created_at", "DESC"]],
   });
 
   if (!otpRecord) {
@@ -408,7 +425,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
   // Find latest unused OTP
   const otpRecord = await EmailOtp.findOne({
     where: { email, isUsed: false },
-    order: [["createdAt", "DESC"]],
+    order: [["created_at", "DESC"]],
   });
 
   if (!otpRecord) {

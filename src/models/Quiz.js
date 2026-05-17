@@ -1,72 +1,33 @@
 import { DataTypes } from 'sequelize';
 
-export default (sequelize) => {
-  const Quiz = sequelize.define('Quiz', {
+export const defineQuizModel = (sequelize) => {
+  return sequelize.define('Quiz', {
     id: {
-      type: DataTypes.BIGINT,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-      autoIncrement: true,
     },
-    subjectId: {
-      type: DataTypes.BIGINT,
-      field: 'subject_id',
-    },
-    createdByAdminId: {
-      type: DataTypes.BIGINT,
+    documentId: {
+      type: DataTypes.UUID,
       allowNull: false,
-      field: 'created_by_admin_id',
+      field: 'document_id',
+    },
+    userId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      field: 'user_id',
     },
     title: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.STRING(200),
       allowNull: false,
-    },
-    description: {
-      type: DataTypes.TEXT,
-    },
-    totalQuestions: {
-      type: DataTypes.INTEGER,
-      field: 'total_questions',
-    },
-    timeLimitMinutes: {
-      type: DataTypes.INTEGER,
-      defaultValue: 30,
-      field: 'time_limit_minutes',
-    },
-    isPublished: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      field: 'is_published',
-    },
-    isApproved: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      field: 'is_approved',
-    },
-    passingScore: {
-      type: DataTypes.INTEGER,
-      defaultValue: 70,
-      field: 'passing_score',
-    },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'created_at',
-    },
-    updatedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'updated_at',
-    },
-    deletedAt: {
-      type: DataTypes.DATE,
-      field: 'deleted_at',
     },
   }, {
     tableName: 'quizzes',
+    schema: 'learning_app',
     timestamps: true,
-    paranoid: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     underscored: true,
-  });
 
-  return Quiz;
+  });
 };

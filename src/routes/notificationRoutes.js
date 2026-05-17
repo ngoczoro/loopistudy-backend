@@ -1,15 +1,15 @@
-import express from 'express';
-import { getNotifications, markAsRead } from '../controllers/notificationController.js';
-import { verifyTokenMiddleware } from '../middlewares/authMiddleware.js';
+import { Router } from "express";
+import * as notificationController from "../controllers/notificationController.js";
+import { verifyTokenMiddleware } from "../middlewares/authMiddleware.js";
 
-const router = express.Router();
+const router = Router();
 
 router.use(verifyTokenMiddleware);
 
-router.route('/')
-  .get(getNotifications);
-
-router.route('/:id/read')
-  .patch(markAsRead);
+router.post("/", notificationController.create);
+router.get("/", notificationController.getAll);
+router.get("/:id", notificationController.getById);
+router.put("/:id", notificationController.update);
+router.delete("/:id", notificationController.remove);
 
 export default router;

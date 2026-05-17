@@ -1,16 +1,15 @@
-import express from 'express';
-import { getQuizzes, getQuizById, createQuiz } from '../controllers/quizController.js';
-import { verifyTokenMiddleware, verifyRole } from '../middlewares/authMiddleware.js';
+import { Router } from "express";
+import * as quizController from "../controllers/quizController.js";
+import { verifyTokenMiddleware } from "../middlewares/authMiddleware.js";
 
-const router = express.Router();
+const router = Router();
 
 router.use(verifyTokenMiddleware);
 
-router.route('/')
-  .get(getQuizzes)
-  .post(verifyRole('admin'), createQuiz);
-
-router.route('/:id')
-  .get(getQuizById);
+router.post("/", quizController.create);
+router.get("/", quizController.getAll);
+router.get("/:id", quizController.getById);
+router.put("/:id", quizController.update);
+router.delete("/:id", quizController.remove);
 
 export default router;

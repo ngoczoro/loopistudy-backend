@@ -1,13 +1,15 @@
-import express from 'express';
-import { getGoals, createGoal } from '../controllers/goalController.js';
-import { verifyTokenMiddleware } from '../middlewares/authMiddleware.js';
+import { Router } from "express";
+import * as goalController from "../controllers/goalController.js";
+import { verifyTokenMiddleware } from "../middlewares/authMiddleware.js";
 
-const router = express.Router();
+const router = Router();
 
 router.use(verifyTokenMiddleware);
 
-router.route('/')
-  .get(getGoals)
-  .post(createGoal);
+router.post("/", goalController.create);
+router.get("/", goalController.getAll);
+router.get("/:id", goalController.getById);
+router.put("/:id", goalController.update);
+router.delete("/:id", goalController.remove);
 
 export default router;
