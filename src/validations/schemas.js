@@ -13,6 +13,13 @@ export {
   updateSubjectSchema,
 } from "../modules/subjects/subject.validation.js";
 
+export {
+  changePasswordSchema,
+  replaceBlockedSlotsSchema,
+  updatePreferencesSchema,
+  updateProfileSchema,
+} from "../modules/users/user.validation.js";
+
 /**
  * Validate request body middleware
  */
