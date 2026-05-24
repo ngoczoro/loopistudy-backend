@@ -1,5 +1,6 @@
 import { Router } from "express";
-import authRoutes from "./authRoutes.js";
+import { authRoutes, passwordRoutes } from "../modules/auth/index.js";
+import userRoutes from "./userRoutes.js";
 import subjectRoutes from "./subjectRoutes.js";
 import documentRoutes from "./documentRoutes.js";
 import noteRoutes from "./noteRoutes.js";
@@ -17,6 +18,8 @@ import violationRoutes from "./violationRoutes.js";
 const router = Router();
 
 router.use("/auth", authRoutes);
+router.use("/password", passwordRoutes);
+router.use("/users", userRoutes);
 router.use("/subjects", subjectRoutes);
 router.use("/documents", documentRoutes);
 router.use("/notes", noteRoutes);

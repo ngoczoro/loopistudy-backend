@@ -1,8 +1,10 @@
 import { verifyAccessToken } from "../utils/jwt.js";
 import ApiError from "../utils/ApiError.js";
+import { normalizeRole } from "../utils/authSerializer.js";
 
 /**
- * Verify JWT Access Token
+ * Verify JWT Access Token and attach normalized user payload.
+ * req.user = { userId, role }
  */
 export const verifyTokenMiddleware = (req, res, next) => {
   try {
@@ -12,10 +14,18 @@ export const verifyTokenMiddleware = (req, res, next) => {
       throw ApiError.unauthorized("Access token is required");
     }
 
-    const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+    const token = authHeader.slice(7);
     const decoded = verifyAccessToken(token);
 
-    req.user = decoded;
+    if (!decoded?.userId) {
+      throw ApiError.unauthorized("Invalid token payload");
+    }
+
+    req.user = {
+      userId: decoded.userId,
+      role: normalizeRole(decoded.role),
+    };
+
     next();
   } catch (error) {
     next(
@@ -57,10 +67,9 @@ export const verifyAdmin = verifyRole("admin");
  */
 export const verifyOwnership = async (req, res, next) => {
   try {
-    const resourceUserId = parseInt(req.params.userId);
+    const resourceUserId = req.params.userId;
     const requestingUserId = req.user.userId;
 
-    // Allow admins to access any resource, users can only access their own
     if (req.user.role !== "admin" && resourceUserId !== requestingUserId) {
       throw ApiError.forbidden("You cannot access this resource");
     }

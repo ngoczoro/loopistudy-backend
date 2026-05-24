@@ -1,37 +1,43 @@
-import { DataTypes } from 'sequelize';
+import { DataTypes } from "sequelize";
+import { modelOptions } from "./shared.js";
 
 export const defineQuizAttemptModel = (sequelize) => {
-  return sequelize.define('QuizAttempt', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
+  return sequelize.define(
+    "QuizAttempt",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      quizId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: "quiz_id",
+      },
+      userId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: "user_id",
+      },
+      score: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+      },
+      total: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+      },
+      timeSpentSeconds: {
+        type: DataTypes.INTEGER,
+        field: "time_spent_seconds",
+      },
+      answers: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+      },
     },
-    quizId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: 'quiz_id',
-    },
-    userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: 'user_id',
-    },
-    score: {
-      type: DataTypes.INTEGER,
-    },
-    completedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      field: 'completed_at',
-    },
-  }, {
-    tableName: 'quiz_attempts',
-    schema: 'learning_app',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-    underscored: true,
-
-  });
+    modelOptions("quiz_attempts"),
+  );
 };

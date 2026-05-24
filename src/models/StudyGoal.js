@@ -1,33 +1,50 @@
-import { DataTypes } from 'sequelize';
+import { DataTypes } from "sequelize";
+import { GOAL_PERIODS, GOAL_UNITS } from "../config/enums.js";
+import { modelOptions } from "./shared.js";
 
 export const defineStudyGoalModel = (sequelize) => {
-  return sequelize.define('StudyGoal', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
+  return sequelize.define(
+    "StudyGoal",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      userId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: "user_id",
+      },
+      title: {
+        type: DataTypes.STRING(200),
+        allowNull: false,
+      },
+      targetValue: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: false,
+        field: "target_value",
+      },
+      currentValue: {
+        type: DataTypes.DECIMAL(10, 2),
+        defaultValue: 0,
+        field: "current_value",
+      },
+      unit: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        validate: { isIn: [GOAL_UNITS] },
+      },
+      period: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        validate: { isIn: [GOAL_PERIODS] },
+      },
+      active: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+      },
     },
-    userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: 'user_id',
-    },
-    targetHoursPerWeek: {
-      type: DataTypes.INTEGER,
-      field: 'target_hours_per_week',
-    },
-    currentHours: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-      field: 'current_hours',
-    },
-  }, {
-    tableName: 'study_goals',
-    schema: 'learning_app',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-    underscored: true,
-
-  });
+    modelOptions("study_goals"),
+  );
 };

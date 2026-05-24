@@ -1,33 +1,41 @@
-import { DataTypes } from 'sequelize';
+import { DataTypes } from "sequelize";
+import { QUIZ_SOURCES } from "../config/enums.js";
+import { modelOptions } from "./shared.js";
 
 export const defineQuizModel = (sequelize) => {
-  return sequelize.define('Quiz', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
+  return sequelize.define(
+    "Quiz",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      userId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: "user_id",
+      },
+      subjectId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "subject_id",
+      },
+      title: {
+        type: DataTypes.STRING(200),
+        allowNull: false,
+      },
+      questions: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      source: {
+        type: DataTypes.STRING(20),
+        defaultValue: "manual",
+        validate: { isIn: [QUIZ_SOURCES] },
+      },
     },
-    documentId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: 'document_id',
-    },
-    userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: 'user_id',
-    },
-    title: {
-      type: DataTypes.STRING(200),
-      allowNull: false,
-    },
-  }, {
-    tableName: 'quizzes',
-    schema: 'learning_app',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-    underscored: true,
-
-  });
+    modelOptions("quizzes", { paranoid: true }),
+  );
 };

@@ -1,4 +1,6 @@
 import { DataTypes } from "sequelize";
+import { ROLES, USER_STATUS } from "../config/constants.js";
+import { modelOptions } from "./shared.js";
 
 export const defineUserModel = (sequelize) => {
   return sequelize.define(
@@ -28,21 +30,16 @@ export const defineUserModel = (sequelize) => {
         field: "avatar_url",
       },
       role: {
-        type: DataTypes.STRING(50),
-        defaultValue: "USER",
+        type: DataTypes.STRING(20),
+        defaultValue: ROLES.STUDENT,
+        validate: { isIn: [[ROLES.ADMIN, ROLES.STUDENT]] },
       },
       status: {
-        type: DataTypes.STRING(50),
-        defaultValue: "PENDING",
+        type: DataTypes.STRING(20),
+        defaultValue: USER_STATUS.PENDING,
+        validate: { isIn: [Object.values(USER_STATUS)] },
       },
     },
-    {
-      tableName: "users",
-      schema: "learning_app",
-      timestamps: true,
-      createdAt: "created_at",
-      updatedAt: "updated_at",
-      underscored: true,
-    },
+    modelOptions("users"),
   );
 };
