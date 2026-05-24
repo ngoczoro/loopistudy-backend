@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authRoutes, passwordRoutes } from "../modules/auth/index.js";
+import { subjectRoutes } from "../modules/subjects/index.js";
 import userRoutes from "./userRoutes.js";
-import subjectRoutes from "./subjectRoutes.js";
 import documentRoutes from "./documentRoutes.js";
 import noteRoutes from "./noteRoutes.js";
 import quizRoutes from "./quizRoutes.js";

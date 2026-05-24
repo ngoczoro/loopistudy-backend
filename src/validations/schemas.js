@@ -1,5 +1,3 @@
-import Joi from "joi";
-
 export {
   registerSchema,
   loginSchema,
@@ -9,6 +7,11 @@ export {
   forgotPasswordSchema,
   resetPasswordWithOtpSchema,
 } from "../modules/auth/auth.validation.js";
+
+export {
+  createSubjectSchema,
+  updateSubjectSchema,
+} from "../modules/subjects/subject.validation.js";
 
 /**
  * Validate request body middleware
@@ -28,29 +31,3 @@ export const validateBody = (schema) => {
     next();
   };
 };
-
-/**
- * Create subject schema
- */
-export const createSubjectSchema = Joi.object({
-  name: Joi.string().min(2).max(255).required(),
-
-  color: Joi.string().optional(),
-
-  difficulty: Joi.string().valid("easy", "medium", "hard").optional(),
-
-  description: Joi.string().allow("").optional(),
-});
-
-/**
- * Update subject schema
- */
-export const updateSubjectSchema = Joi.object({
-  name: Joi.string().min(2).max(255).optional(),
-
-  color: Joi.string().optional(),
-
-  difficulty: Joi.string().valid("easy", "medium", "hard").optional(),
-
-  description: Joi.string().allow("").optional(),
-});
