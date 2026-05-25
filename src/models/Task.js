@@ -25,6 +25,10 @@ export const defineTaskModel = (sequelize) => {
         type: DataTypes.STRING(255),
         allowNull: false,
       },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       priority: {
         type: DataTypes.STRING(10),
         defaultValue: PRIORITY.MEDIUM,
@@ -40,6 +44,11 @@ export const defineTaskModel = (sequelize) => {
       completed: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
+      },
+      completedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "completed_at",
       },
     },
     modelOptions("tasks"),
