@@ -47,6 +47,11 @@ export const FOCUS_SESSION_STATUS = {
   CANCELLED: "cancelled",
 };
 
+export const FOCUS_SESSION_PHASE = {
+  WORK: "work",
+  BREAK: "break",
+};
+
 export const JWT_EXPIRY = {
   ACCESS: "15m",
   REFRESH: "7d",

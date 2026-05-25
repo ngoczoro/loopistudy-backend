@@ -15,22 +15,61 @@ const sessionOverlapsBlockedSlot = (
   startHour,
   durationHours,
   blockedSlots,
+  { logContext = null } = {},
 ) => {
+  const sessionDay = toNumber(dayOfWeek);
   const start = toNumber(startHour);
   const end = start + toNumber(durationHours);
 
+  if (logContext) {
+    console.log("[assertNotBlocked] session", {
+      ...logContext,
+      dayOfWeek,
+      sessionDay,
+      startHour,
+      durationHours,
+      start,
+      end,
+      startIsNaN: Number.isNaN(start),
+      endIsNaN: Number.isNaN(end),
+    });
+  }
+
   for (const slot of blockedSlots) {
     const slotDay =
-      typeof slot.day === "string" ? dayLabelToNumber(slot.day) : slot.day;
+      typeof slot.day === "string" ? dayLabelToNumber(slot.day) : toNumber(slot.day);
 
-    if (slotDay !== dayOfWeek) {
+    if (slotDay === null || Number.isNaN(slotDay) || slotDay !== sessionDay) {
       continue;
     }
 
-    const blockedStart = slot.hour;
+    const blockedStart = toNumber(slot.hour);
     const blockedEnd = blockedStart + 1;
+    const overlaps = start < blockedEnd && end > blockedStart;
 
-    if (start < blockedEnd && end > blockedStart) {
+    if (logContext) {
+      console.log("[assertNotBlocked] compare", {
+        slotDay,
+        slotDayLabel: slot.day,
+        blockedHourRaw: slot.hour,
+        blockedHourType: typeof slot.hour,
+        blockedStart,
+        blockedEnd,
+        sessionStart: start,
+        sessionEnd: end,
+        overlaps,
+      });
+    }
+
+    if (overlaps) {
+      if (logContext) {
+        console.log("[assertNotBlocked] REJECT", {
+          reason: "interval_overlap",
+          slotDay,
+          blockedRange: [blockedStart, blockedEnd],
+          sessionRange: [start, end],
+        });
+      }
       return true;
     }
   }
@@ -40,6 +79,10 @@ const sessionOverlapsBlockedSlot = (
 
 const assertNotBlocked = async (userId, dayOfWeek, startHour, durationHours) => {
   const blockedSlots = await getBlockedSlots(userId);
+  const logContext =
+    process.env.NODE_ENV === "development"
+      ? { userId, blockedSlotCount: blockedSlots.length }
+      : null;
 
   if (
     sessionOverlapsBlockedSlot(
@@ -47,6 +90,7 @@ const assertNotBlocked = async (userId, dayOfWeek, startHour, durationHours) => 
       startHour,
       durationHours,
       blockedSlots,
+      { logContext },
     )
   ) {
     throw ApiError.badRequest(

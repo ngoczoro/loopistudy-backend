@@ -18,7 +18,7 @@ export const defineFocusSessionModel = (sequelize) => {
       },
       subjectId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         field: "subject_id",
       },
       plannerSessionId: {
@@ -64,6 +64,29 @@ export const defineFocusSessionModel = (sequelize) => {
       completedAt: {
         type: DataTypes.DATE,
         field: "completed_at",
+      },
+      notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      currentPhase: {
+        type: DataTypes.STRING(10),
+        defaultValue: "work",
+        field: "current_phase",
+        validate: { isIn: [["work", "break"]] },
+      },
+      phaseEndsAt: {
+        type: DataTypes.DATE,
+        field: "phase_ends_at",
+      },
+      remainingSeconds: {
+        type: DataTypes.INTEGER,
+        field: "remaining_seconds",
+      },
+      workElapsedSeconds: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        field: "work_elapsed_seconds",
       },
     },
     modelOptions("focus_sessions"),

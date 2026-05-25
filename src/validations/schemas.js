@@ -27,6 +27,22 @@ export {
   updatePlannerSessionSchema,
 } from "../modules/planner/planner.validation.js";
 
+export {
+  abandonFocusSessionSchema,
+  completeFocusSessionSchema,
+  createFocusSessionSchema,
+  focusSessionIdParamSchema,
+  pauseFocusSessionSchema,
+  syncFocusSessionSchema,
+} from "../modules/focus/focus.validation.js";
+
+export {
+  analyticsDateRangeQuerySchema,
+  analyticsPlannerQuerySchema,
+  analyticsTrendsQuerySchema,
+  focusHistoryQuerySchema,
+} from "../modules/focus/focus.analytics.validation.js";
+
 /**
  * Validate request body middleware
  */
