@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { verifyTokenMiddleware } from "../../middlewares/authMiddleware.js";
 import { validateBody } from "../../validations/schemas.js";
-import upload from "../../middleware/upload.middleware.js";
+import { uploadSingleFile } from "../../middleware/upload.middleware.js";
 import {
   create,
   getById,
@@ -78,7 +78,7 @@ router.get(
 );
 router.post(
   "/upload",
-  upload.single("file"),
+  uploadSingleFile,
   validateBody(uploadMetadataSchema),
   uploadFile,
 );

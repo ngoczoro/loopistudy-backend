@@ -5,7 +5,10 @@ import ApiError from "../../utils/ApiError.js";
 import cloudinary from "../config/cloudinary.js";
 
 export const CLOUDINARY_FOLDER = "loopi-study/materials";
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+export const MAX_FILE_SIZE = 5 * 1024 * 1024;
+export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE;
+export const FILE_SIZE_LIMIT_MESSAGE =
+  "File vượt quá 5MB, không được phép upload.";
 export const UPLOAD_FIELD_NAME = "file";
 
 export const ALLOWED_MIME_TYPES = [
@@ -106,7 +109,7 @@ export const uploadSingle = (req, res, next) => {
 
     if (error instanceof multer.MulterError) {
       if (error.code === "LIMIT_FILE_SIZE") {
-        next(ApiError.badRequest("File exceeds the 10MB size limit"));
+        next(ApiError.badRequest(FILE_SIZE_LIMIT_MESSAGE));
         return;
       }
       next(ApiError.badRequest(error.message));

@@ -11,6 +11,9 @@ import {
   isDocumentFile,
   isImageFile,
 } from "../../shared/utils/contentFileTypes.js";
+import {
+  assertFileSizeWithinLimit,
+} from "../../middleware/upload.middleware.js";
 import * as contentService from "./content.service.js";
 
 const cleanupTempFile = (file) => {
@@ -82,6 +85,8 @@ export const uploadFile = async (req, res) => {
   let uploadResult;
 
   try {
+    assertFileSizeWithinLimit(req.file);
+
     if (isImageFile(req.file)) {
       const cloudinaryResult = await uploadImageToCloudinary(req.file);
       uploadResult = {
