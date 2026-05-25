@@ -1,14 +1,18 @@
-import dotenv from "dotenv";
+import "../config/loadEnv.js";
 import sequelize from "../config/database.js";
 import { initializeModels } from "../models/index.js";
 import { up as normalizeAuthEnums } from "./003_normalize_auth_enums.js";
 import { up as frontendAlignedSchema } from "./004_frontend_aligned_schema.js";
-
-dotenv.config();
+import { up as contentItemsCloudinaryFields } from "./005_content_items_cloudinary_fields.js";
+import { up as removeGoogleDriveFileId } from "./007_remove_google_drive_file_id.js";
+import { up as cleanupGoogleDriveColumn } from "./008_cleanup_google_drive_column.js";
 
 const migrations = [
   { name: "003_normalize_auth_enums", up: normalizeAuthEnums },
   { name: "004_frontend_aligned_schema", up: frontendAlignedSchema },
+  { name: "005_content_items_cloudinary_fields", up: contentItemsCloudinaryFields },
+  { name: "007_remove_google_drive_file_id", up: removeGoogleDriveFileId },
+  { name: "008_cleanup_google_drive_column", up: cleanupGoogleDriveColumn },
 ];
 
 const runMigrations = async () => {

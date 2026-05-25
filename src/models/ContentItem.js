@@ -25,6 +25,9 @@ export const defineContentItemModel = (sequelize) => {
         type: DataTypes.STRING(200),
         allowNull: false,
       },
+      description: {
+        type: DataTypes.TEXT,
+      },
       type: {
         type: DataTypes.STRING(10),
         allowNull: false,
@@ -39,6 +42,10 @@ export const defineContentItemModel = (sequelize) => {
         type: DataTypes.TEXT,
         field: "file_url",
       },
+      fileName: {
+        type: DataTypes.STRING(255),
+        field: "file_name",
+      },
       fileMime: {
         type: DataTypes.STRING(100),
         field: "file_mime",
@@ -46,6 +53,10 @@ export const defineContentItemModel = (sequelize) => {
       fileSizeBytes: {
         type: DataTypes.BIGINT,
         field: "file_size_bytes",
+      },
+      cloudinaryPublicId: {
+        type: DataTypes.TEXT,
+        field: "cloudinary_public_id",
       },
       isPinned: {
         type: DataTypes.BOOLEAN,

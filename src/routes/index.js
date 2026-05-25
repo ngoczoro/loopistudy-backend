@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authRoutes, passwordRoutes } from "../modules/auth/index.js";
 import { subjectRoutes } from "../modules/subjects/index.js";
+import { contentRoutes } from "../modules/content/index.js";
 import { userRoutes } from "../modules/users/index.js";
 import documentRoutes from "./documentRoutes.js";
 import noteRoutes from "./noteRoutes.js";
@@ -21,6 +22,7 @@ router.use("/auth", authRoutes);
 router.use("/password", passwordRoutes);
 router.use("/users", userRoutes);
 router.use("/subjects", subjectRoutes);
+router.use("/content", contentRoutes);
 router.use("/documents", documentRoutes);
 router.use("/notes", noteRoutes);
 router.use("/quizzes", quizRoutes);

@@ -1,8 +1,8 @@
+import "./src/config/loadEnv.js";
+
 import app from "./src/app.js";
 import sequelize from "./src/config/database.js";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { initializeModels } from "./src/models/index.js";
 
 const PORT = process.env.PORT || 5000;
 
@@ -11,21 +11,19 @@ const PORT = process.env.PORT || 5000;
  */
 const startServer = async () => {
   try {
-    // Test database connection
     await sequelize.authenticate();
     console.log("✓ Database connection successful");
 
-    // Sync models (only in development)
+    initializeModels();
+
     if (process.env.NODE_ENV !== "production") {
       await sequelize.sync({ alter: false });
       console.log("✓ Database models synced");
     }
 
-    // Auto-seed admin
     const { seedAdmin } = await import("./src/utils/seedAdmin.js");
     await seedAdmin();
 
-    // Start Express server
     app.listen(PORT, () => {
       console.log(`✓ Server running on http://localhost:${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || "development"}`);
@@ -37,17 +35,14 @@ const startServer = async () => {
   }
 };
 
-// Handle unhandled promise rejections
 process.on("unhandledRejection", (error) => {
   console.error("✗ Unhandled Rejection:", error);
   process.exit(1);
 });
 
-// Handle uncaught exceptions
 process.on("uncaughtException", (error) => {
   console.error("✗ Uncaught Exception:", error);
   process.exit(1);
 });
 
-// Start server
 startServer();

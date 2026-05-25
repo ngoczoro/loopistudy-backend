@@ -8,8 +8,5 @@ export const modelOptions = (tableName, { paranoid = false } = {}) => ({
   schema: SCHEMA,
   underscored: true,
   timestamps: true,
-  createdAt: "created_at",
-  updatedAt: "updated_at",
   paranoid,
-  deletedAt: "deleted_at",
 });
