@@ -46,6 +46,22 @@ const getOwnedOrThrow = async (userId, id) => {
   return item;
 };
 
+const getExistingOrThrow = async (id) => {
+  const item = await contentRepository.findById(id);
+  if (!item) {
+    throw ApiError.notFound("Content not found");
+  }
+  return item;
+};
+
+const getExistingFileOrThrow = async (id) => {
+  const item = await getExistingOrThrow(id);
+  if (item.type !== CONTENT_TYPE.FILE) {
+    throw ApiError.badRequest("Preview is only available for file content");
+  }
+  return item;
+};
+
 const getOwnedFileOrThrow = async (userId, id) => {
   const item = await getOwnedOrThrow(userId, id);
   if (item.type !== CONTENT_TYPE.FILE) {
@@ -277,4 +293,29 @@ export const remove = async (userId, id) => {
   }
 
   await contentRepository.softDeleteById(id, userId);
+};
+
+export const getByIdForAdmin = async (id) => {
+  const item = await contentRepository.findByIdWithOwner(id);
+  if (!item) {
+    throw ApiError.notFound("Content not found");
+  }
+  return item;
+};
+
+export const getTextPreviewForAdmin = async (id) => {
+  const item = await getExistingFileOrThrow(id);
+  assertTextFileItem(item);
+  const text = await fetchTextContent(item);
+  return { text };
+};
+
+export const getDocPreviewForAdmin = async (id) => {
+  const item = await getExistingFileOrThrow(id);
+  return fetchDocPreview(item);
+};
+
+export const getExcelPreviewForAdmin = async (id) => {
+  const item = await getExistingFileOrThrow(id);
+  return fetchExcelPreview(item);
 };

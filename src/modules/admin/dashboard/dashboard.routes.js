@@ -1,12 +1,17 @@
 import { Router } from "express";
-import { requireAdmin } from "../shared/admin.middleware.js";
-import { getOverview } from "./dashboard.controller.js";
+import { requireAdmin, validateQuery } from "../shared/admin.middleware.js";
+import { getRecentContent, getStats } from "./dashboard.controller.js";
+import { recentContentQuerySchema } from "./dashboard.validation.js";
 
 const router = Router();
 
 router.use(...requireAdmin);
 
-/** Future: widgets, stats, trends. */
-router.get("/", getOverview);
+router.get("/stats", getStats);
+router.get(
+  "/recent-content",
+  validateQuery(recentContentQuerySchema),
+  getRecentContent,
+);
 
 export default router;

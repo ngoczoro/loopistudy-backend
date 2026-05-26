@@ -1,10 +1,12 @@
 import { Router } from "express";
 import dashboardRoutes from "./dashboard/dashboard.routes.js";
+import adminContentRoutes from "./content/adminContent.routes.js";
 import userManagementRoutes from "./user-management/userManagement.routes.js";
 
 const router = Router();
 
 router.use("/dashboard", dashboardRoutes);
+router.use("/content", adminContentRoutes);
 router.use("/users", userManagementRoutes);
 
 export default router;

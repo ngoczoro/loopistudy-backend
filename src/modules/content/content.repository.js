@@ -28,6 +28,19 @@ export const findByIdAndUserId = async (id, userId) =>
     where: { id, userId },
   });
 
+export const findById = async (id) => ContentItem().findByPk(id);
+
+export const findByIdWithOwner = async (id) =>
+  ContentItem().findByPk(id, {
+    include: [
+      {
+        model: sequelize.models.User,
+        as: "user",
+        attributes: ["id", "fullName", "email"],
+      },
+    ],
+  });
+
 export const findBySubjectId = async (userId, subjectId) =>
   ContentItem().findAll({
     where: { userId, subjectId },
