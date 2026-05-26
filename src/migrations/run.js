@@ -14,6 +14,7 @@ import { up as tasksPhase3Fields } from "./009_tasks_phase3_fields.js";
 import { up as focusSessionsOptionalSubject } from "./010_focus_sessions_optional_subject.js";
 import { up as schemaConsistencyFocusSessions } from "./011_schema_consistency_focus_sessions.js";
 import { up as securityEvents } from "./012_security_events.js";
+import { up as adminUserLockFields } from "./013_admin_user_lock_fields.js";
 
 const migrations = [
   { name: "003_normalize_auth_enums", up: normalizeAuthEnums },
@@ -29,6 +30,7 @@ const migrations = [
   { name: "010_focus_sessions_optional_subject", up: focusSessionsOptionalSubject },
   { name: "011_schema_consistency_focus_sessions", up: schemaConsistencyFocusSessions },
   { name: "012_security_events", up: securityEvents },
+  { name: "013_admin_user_lock_fields", up: adminUserLockFields },
 ];
 
 const runMigrations = async () => {

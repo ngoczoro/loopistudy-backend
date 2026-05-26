@@ -39,6 +39,16 @@ export const defineUserModel = (sequelize) => {
         defaultValue: USER_STATUS.PENDING,
         validate: { isIn: [Object.values(USER_STATUS)] },
       },
+      lockedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "locked_at",
+      },
+      lockedReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "locked_reason",
+      },
     },
     modelOptions("users"),
   );
