@@ -64,6 +64,20 @@ const extractFileMetadata = (file, uploadResult) => ({
   cloudinaryPublicId: uploadResult.cloudinaryPublicId,
 });
 
+const deleteCloudinaryAsset = async (item) => {
+  if (!item?.cloudinaryPublicId) return;
+
+  try {
+    if (isImageFile(item)) {
+      await deleteImageFromCloudinary(item.cloudinaryPublicId);
+    } else {
+      await deleteDocumentFromCloudinary(item.cloudinaryPublicId);
+    }
+  } catch (error) {
+    console.error("Cloudinary delete failed:", error.message);
+  }
+};
+
 const URL_PATTERN =
   /^https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_+.~#?&/=]*)$/;
 
@@ -83,6 +97,7 @@ const buildNotePayload = async (userId, payload) => {
     description: payload.description?.trim() || null,
     type: CONTENT_TYPE.NOTE,
     content: payload.content.trim(),
+    isPinned: Boolean(payload.isPinned),
   };
 };
 
@@ -164,7 +179,13 @@ export const createFileContent = async (userId, body, file, uploadResult) => {
   return serializeContentItem(item);
 };
 
-export const update = async (userId, id, payload) => {
+export const update = async (
+  userId,
+  id,
+  payload,
+  replacementFile = null,
+  uploadResult = null,
+) => {
   const existing = await getOwnedOrThrow(userId, id);
 
   if (payload.type && payload.type !== existing.type) {
@@ -179,6 +200,10 @@ export const update = async (userId, id, payload) => {
 
   if (payload.description !== undefined) {
     updates.description = payload.description?.trim() || null;
+  }
+
+  if (payload.isPinned !== undefined) {
+    updates.isPinned = Boolean(payload.isPinned);
   }
 
   if (payload.subjectId !== undefined) {
@@ -208,18 +233,19 @@ export const update = async (userId, id, payload) => {
   }
 
   if (existing.type === CONTENT_TYPE.FILE) {
-    if (payload.fileName !== undefined) {
-      updates.fileName = payload.fileName.trim();
+    if (replacementFile) {
+      if (!uploadResult) {
+        throw ApiError.badRequest("Upload result is required when replacing file");
+      }
+      await deleteCloudinaryAsset(existing);
+      Object.assign(updates, extractFileMetadata(replacementFile, uploadResult));
     }
-    if (payload.fileUrl !== undefined) {
-      updates.fileUrl = payload.fileUrl;
-    }
-    if (payload.fileSize !== undefined) {
-      updates.fileSizeBytes = payload.fileSize;
-    }
-    if (payload.mimeType !== undefined) {
-      updates.fileMime = payload.mimeType.trim();
-    }
+  } else if (replacementFile) {
+    throw ApiError.badRequest("Replacement file is only supported for file content");
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw ApiError.badRequest("At least one field is required to update");
   }
 
   const updated = await contentRepository.updateById(id, userId, updates);
@@ -246,16 +272,8 @@ export const getExcelPreview = async (userId, id) => {
 export const remove = async (userId, id) => {
   const item = await getOwnedOrThrow(userId, id);
 
-  if (item.type === CONTENT_TYPE.FILE && item.cloudinaryPublicId) {
-    try {
-      if (isImageFile(item)) {
-        await deleteImageFromCloudinary(item.cloudinaryPublicId);
-      } else {
-        await deleteDocumentFromCloudinary(item.cloudinaryPublicId);
-      }
-    } catch (error) {
-      console.error("Cloudinary delete failed:", error.message);
-    }
+  if (item.type === CONTENT_TYPE.FILE) {
+    await deleteCloudinaryAsset(item);
   }
 
   await contentRepository.softDeleteById(id, userId);

@@ -30,7 +30,10 @@ const dateFilterSql = (column) => `
 `;
 
 export const aggregateSummary = async (userId, { fromDate = null, toDate = null } = {}) => {
-  const [row] = await sequelize.query(
+  console.log("[focus-analytics] aggregateSummary", { userId, fromDate, toDate });
+
+  try {
+    const [row] = await sequelize.query(
     `
     SELECT
       COUNT(*) FILTER (WHERE fs.status = 'completed')::int AS completed_count,
@@ -61,7 +64,14 @@ export const aggregateSummary = async (userId, { fromDate = null, toDate = null 
     },
   );
 
-  return row;
+    return row;
+  } catch (error) {
+    console.error(
+      "[focus-analytics] aggregateSummary SQL failed:",
+      error.message,
+    );
+    throw error;
+  }
 };
 
 export const aggregateDailyTrends = async (

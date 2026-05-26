@@ -20,6 +20,7 @@ import {
   listQuerySchema,
   subjectIdParamSchema,
   updateContentSchema,
+  updateContentMultipartSchema,
   uploadMetadataSchema,
 } from "./content.validation.js";
 
@@ -48,6 +49,33 @@ const validateQuery = (schema) => (req, res, next) => {
     });
   }
 
+  next();
+};
+
+const validateUpdateContent = (req, res, next) => {
+  const schema = req.file ? updateContentMultipartSchema : updateContentSchema;
+  const { error, value } = schema.validate(req.body, {
+    stripUnknown: true,
+    convert: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Validation error",
+      errors: error.details[0].message,
+    });
+  }
+
+  const hasFields = Object.keys(value).length > 0;
+  if (!hasFields && !req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "At least one field or replacement file is required",
+    });
+  }
+
+  req.body = value;
   next();
 };
 
@@ -87,7 +115,8 @@ router.get("/:id", validateParams(contentIdParamSchema), getById);
 router.put(
   "/:id",
   validateParams(contentIdParamSchema),
-  validateBody(updateContentSchema),
+  uploadSingleFile,
+  validateUpdateContent,
   update,
 );
 router.delete("/:id", validateParams(contentIdParamSchema), remove);

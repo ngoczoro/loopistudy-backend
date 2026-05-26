@@ -22,6 +22,28 @@ const cleanupTempFile = (file) => {
   }
 };
 
+const uploadFileToCloudinary = async (file) => {
+  assertFileSizeWithinLimit(file);
+
+  if (isImageFile(file)) {
+    const cloudinaryResult = await uploadImageToCloudinary(file);
+    return {
+      fileUrl: cloudinaryResult.secureUrl,
+      cloudinaryPublicId: cloudinaryResult.publicId,
+    };
+  }
+
+  if (isDocumentFile(file)) {
+    const cloudinaryResult = await uploadDocumentToCloudinary(file);
+    return {
+      fileUrl: cloudinaryResult.secureUrl,
+      cloudinaryPublicId: cloudinaryResult.publicId,
+    };
+  }
+
+  throw ApiError.badRequest("Unsupported file type");
+};
+
 const sendUploadError = (res, error) => {
   console.error("UPLOAD ERROR:", error);
 
@@ -82,30 +104,8 @@ export const uploadFile = async (req, res) => {
     });
   }
 
-  let uploadResult;
-
   try {
-    assertFileSizeWithinLimit(req.file);
-
-    if (isImageFile(req.file)) {
-      const cloudinaryResult = await uploadImageToCloudinary(req.file);
-      uploadResult = {
-        fileUrl: cloudinaryResult.secureUrl,
-        cloudinaryPublicId: cloudinaryResult.publicId,
-      };
-    } else if (isDocumentFile(req.file)) {
-      const cloudinaryResult = await uploadDocumentToCloudinary(req.file);
-      uploadResult = {
-        fileUrl: cloudinaryResult.secureUrl,
-        cloudinaryPublicId: cloudinaryResult.publicId,
-      };
-    } else {
-      throw ApiError.badRequest("Unsupported file type");
-    }
-
-    if (!uploadResult?.fileUrl) {
-      throw ApiError.internalServer("File upload did not return a storage URL");
-    }
+    const uploadResult = await uploadFileToCloudinary(req.file);
 
     const data = await contentService.createFileContent(
       req.user.userId,
@@ -125,12 +125,40 @@ export const uploadFile = async (req, res) => {
 };
 
 export const update = asyncHandler(async (req, res) => {
-  const data = await contentService.update(
-    req.user.userId,
-    req.params.id,
-    req.body,
-  );
-  res.json(buildSuccessResponse("Content updated successfully", data));
+  try {
+    let uploadResult = null;
+
+    if (req.file) {
+      const uploadType = getUploadType(req.file);
+      if (!uploadType) {
+        cleanupTempFile(req.file);
+        return res.status(400).json({
+          success: false,
+          message: "Unsupported file type",
+        });
+      }
+
+      uploadResult = await uploadFileToCloudinary(req.file);
+    }
+
+    const data = await contentService.update(
+      req.user.userId,
+      req.params.id,
+      req.body,
+      req.file || null,
+      uploadResult,
+    );
+
+    return res.json(buildSuccessResponse("Content updated successfully", data));
+  } catch (error) {
+    if (req.file) {
+      return sendUploadError(res, error);
+    }
+
+    throw error;
+  } finally {
+    cleanupTempFile(req.file);
+  }
 });
 
 export const remove = asyncHandler(async (req, res) => {

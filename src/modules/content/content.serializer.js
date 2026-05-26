@@ -49,6 +49,7 @@ export const serializeContentItem = (item) => {
     previewable,
     downloadable,
     previewNotSupported: DOWNLOAD_ONLY_EXTENSIONS.has(ext),
+    isPinned: Boolean(plain.isPinned),
     createdAt: plain.createdAt ?? plain.created_at ?? null,
     updatedAt: plain.updatedAt ?? plain.updated_at ?? null,
   };

@@ -12,6 +12,7 @@ import { up as cleanupGoogleDriveColumn } from "./008_cleanup_google_drive_colum
 import { up as focusUnfinishedWorkspaceIndexes } from "./008_focus_unfinished_workspace_indexes.js";
 import { up as tasksPhase3Fields } from "./009_tasks_phase3_fields.js";
 import { up as focusSessionsOptionalSubject } from "./010_focus_sessions_optional_subject.js";
+import { up as schemaConsistencyFocusSessions } from "./011_schema_consistency_focus_sessions.js";
 
 const migrations = [
   { name: "003_normalize_auth_enums", up: normalizeAuthEnums },
@@ -25,6 +26,7 @@ const migrations = [
   { name: "008_focus_unfinished_workspace_indexes", up: focusUnfinishedWorkspaceIndexes },
   { name: "009_tasks_phase3_fields", up: tasksPhase3Fields },
   { name: "010_focus_sessions_optional_subject", up: focusSessionsOptionalSubject },
+  { name: "011_schema_consistency_focus_sessions", up: schemaConsistencyFocusSessions },
 ];
 
 const runMigrations = async () => {

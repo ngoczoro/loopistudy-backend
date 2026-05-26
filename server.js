@@ -16,6 +16,11 @@ const startServer = async () => {
 
     initializeModels();
 
+    const { verifyFocusSessionSchema } = await import(
+      "./src/shared/database/schemaGuard.js"
+    );
+    await verifyFocusSessionSchema();
+
     if (process.env.NODE_ENV !== "production") {
       await sequelize.sync({ alter: false });
       console.log("✓ Database models synced");

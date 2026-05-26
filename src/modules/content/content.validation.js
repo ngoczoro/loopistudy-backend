@@ -32,6 +32,7 @@ export const createNoteSchema = Joi.object({
   description: Joi.string().trim().max(5000).allow("", null).optional(),
   content: Joi.string().trim().min(1).required(),
   subjectId: nullableSubjectId,
+  isPinned: Joi.boolean().optional(),
 });
 
 export const createLinkSchema = Joi.object({
@@ -58,18 +59,45 @@ export const uploadMetadataSchema = Joi.object({
   subjectId: nullableSubjectId,
 });
 
-export const updateContentSchema = Joi.object({
+export const legacyNoteCreateSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(200).required(),
+  description: Joi.string().trim().max(5000).allow("", null).optional(),
+  content: Joi.string().trim().min(1).required(),
+  subjectId: nullableSubjectId,
+  isPinned: Joi.boolean().optional(),
+});
+
+export const legacyNoteUpdateSchema = Joi.object({
   title: Joi.string().trim().min(1).max(200).optional(),
   description: Joi.string().trim().max(5000).allow("", null).optional(),
   subjectId: nullableSubjectId,
   content: Joi.string().trim().optional(),
-  fileName: Joi.string().trim().max(255).optional(),
-  fileUrl: Joi.string().uri().optional(),
-  fileSize: Joi.number().integer().min(0).optional(),
-  mimeType: Joi.string().trim().max(100).optional(),
-  type: Joi.forbidden(),
+  isPinned: Joi.boolean().optional(),
 })
   .min(1)
   .messages({
     "object.min": "At least one field is required to update",
   });
+
+const updateContentFieldsSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(200).optional(),
+  description: Joi.string().trim().max(5000).allow("", null).optional(),
+  subjectId: nullableSubjectId,
+  content: Joi.string().trim().optional(),
+  isPinned: Joi.boolean().optional(),
+  type: Joi.forbidden(),
+  fileName: Joi.forbidden().messages({
+    "any.unknown": "File name cannot be edited manually. Upload a replacement file instead.",
+  }),
+  fileUrl: Joi.forbidden(),
+  fileSize: Joi.forbidden(),
+  mimeType: Joi.forbidden(),
+});
+
+export const updateContentSchema = updateContentFieldsSchema
+  .min(1)
+  .messages({
+    "object.min": "At least one field is required to update",
+  });
+
+export const updateContentMultipartSchema = updateContentFieldsSchema;
