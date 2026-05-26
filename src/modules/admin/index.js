@@ -1,12 +1,16 @@
 import { Router } from "express";
 import dashboardRoutes from "./dashboard/dashboard.routes.js";
 import adminContentRoutes from "./content/adminContent.routes.js";
+import adminSubjectsRoutes from "./subjects/adminSubjects.routes.js";
+import adminViolationsRoutes from "./violations/adminViolations.routes.js";
 import userManagementRoutes from "./user-management/userManagement.routes.js";
 
 const router = Router();
 
 router.use("/dashboard", dashboardRoutes);
 router.use("/content", adminContentRoutes);
+router.use("/subjects", adminSubjectsRoutes);
+router.use("/violations", adminViolationsRoutes);
 router.use("/users", userManagementRoutes);
 
 export default router;

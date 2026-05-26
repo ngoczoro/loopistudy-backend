@@ -295,6 +295,16 @@ export const remove = async (userId, id) => {
   await contentRepository.softDeleteById(id, userId);
 };
 
+export const removeForAdmin = async (id) => {
+  const item = await getExistingOrThrow(id);
+
+  if (item.type === CONTENT_TYPE.FILE) {
+    await deleteCloudinaryAsset(item);
+  }
+
+  await item.destroy();
+};
+
 export const getByIdForAdmin = async (id) => {
   const item = await contentRepository.findByIdWithOwner(id);
   if (!item) {

@@ -1,16 +1,32 @@
 import { Router } from "express";
-import { requireAdmin, validateParams } from "../shared/admin.middleware.js";
 import {
+  requireAdmin,
+  validateParams,
+  validateQuery,
+} from "../shared/admin.middleware.js";
+import {
+  deleteContent,
   getContentById,
   getDocPreview,
   getExcelPreview,
   getTextPreview,
+  listContent,
 } from "./adminContent.controller.js";
-import { adminContentIdParamSchema } from "./adminContent.validation.js";
+import {
+  adminContentIdParamSchema,
+  adminListContentQuerySchema,
+} from "./adminContent.validation.js";
 
 const router = Router();
 
 router.use(...requireAdmin);
+
+router.get("/", validateQuery(adminListContentQuerySchema), listContent);
+router.delete(
+  "/:id",
+  validateParams(adminContentIdParamSchema),
+  deleteContent,
+);
 
 router.get(
   "/:id/text-preview",
