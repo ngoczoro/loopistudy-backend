@@ -1,3 +1,6 @@
+/**
+ * @deprecated Use modules/goals/goals.repository.js
+ */
 import sequelize from "../config/database.js";
 
 export const create = async (userId, data) => {

@@ -140,6 +140,21 @@ export const countByUserId = async (userId, filters = {}) => {
   return Task().count({ where });
 };
 
+/** Tasks marked complete with completed_at on a UTC calendar day in [fromDate, toDate]. */
+export const countCompletedInPeriod = async (userId, fromDate, toDate) => {
+  return Task().count({
+    where: {
+      userId,
+      completed: true,
+      completedAt: {
+        [Op.ne]: null,
+        [Op.gte]: new Date(`${fromDate}T00:00:00.000Z`),
+        [Op.lte]: new Date(`${toDate}T23:59:59.999Z`),
+      },
+    },
+  });
+};
+
 export const findUpcoming = async (userId, limit = 10) =>
   Task().findAll({
     where: {

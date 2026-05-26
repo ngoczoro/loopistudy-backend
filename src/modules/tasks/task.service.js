@@ -7,10 +7,27 @@ import {
 } from "./task.constants.js";
 import * as taskRepository from "./task.repository.js";
 import {
+  createTaskCompletedEvent,
+  dispatchProgressEvent,
+} from "../progress/index.js";
+import {
   serializeTask,
   serializeTaskList,
   serializeTaskSummary,
 } from "./task.serializer.js";
+
+const dispatchTaskCompletedIfNew = (userId, taskRow) => {
+  if (!taskRow?.completed) {
+    return;
+  }
+
+  dispatchProgressEvent(
+    createTaskCompletedEvent(userId, {
+      taskId: taskRow.id,
+      completedAt: taskRow.completedAt,
+    }),
+  );
+};
 
 const normalizeSubjectId = (subjectId) => {
   if (
@@ -118,7 +135,8 @@ export const create = async (userId, input) => {
 };
 
 export const update = async (userId, id, input) => {
-  await getOwnedOrThrow(userId, id);
+  const existing = await getOwnedOrThrow(userId, id);
+  const wasCompleted = Boolean(existing.completed);
   const payload = await buildUpdatePayload(userId, input);
 
   if (Object.keys(payload).length === 0) {
@@ -130,11 +148,18 @@ export const update = async (userId, id, input) => {
     throw ApiError.notFound("Task not found or you don't have permission");
   }
 
+  const becameCompleted =
+    input.completed === true && !wasCompleted && Boolean(item.completed);
+  if (becameCompleted) {
+    dispatchTaskCompletedIfNew(userId, item);
+  }
+
   return serializeTask(item);
 };
 
 export const complete = async (userId, id, completed) => {
-  await getOwnedOrThrow(userId, id);
+  const existing = await getOwnedOrThrow(userId, id);
+  const wasCompleted = Boolean(existing.completed);
 
   const item = await taskRepository.updateById(id, userId, {
     completed,
@@ -143,6 +168,10 @@ export const complete = async (userId, id, completed) => {
 
   if (!item) {
     throw ApiError.notFound("Task not found or you don't have permission");
+  }
+
+  if (completed && !wasCompleted) {
+    dispatchTaskCompletedIfNew(userId, item);
   }
 
   return serializeTask(item);

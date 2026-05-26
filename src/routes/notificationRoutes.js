@@ -8,6 +8,7 @@ router.use(verifyTokenMiddleware);
 
 router.post("/", notificationController.create);
 router.get("/", notificationController.getAll);
+router.patch("/:id/read", notificationController.markAsRead);
 router.get("/:id", notificationController.getById);
 router.put("/:id", notificationController.update);
 router.delete("/:id", notificationController.remove);

@@ -1,5 +1,5 @@
 import { DataTypes } from "sequelize";
-import { GOAL_PERIODS, GOAL_UNITS } from "../config/enums.js";
+import { GOAL_METRIC_KEYS, GOAL_PERIODS, GOAL_UNITS } from "../config/enums.js";
 import { modelOptions } from "./shared.js";
 
 export const defineStudyGoalModel = (sequelize) => {
@@ -43,6 +43,18 @@ export const defineStudyGoalModel = (sequelize) => {
       active: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
+      },
+      metricKey: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: "manual",
+        field: "metric_key",
+        validate: { isIn: [GOAL_METRIC_KEYS] },
+      },
+      timezone: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        defaultValue: "UTC",
       },
     },
     modelOptions("study_goals"),

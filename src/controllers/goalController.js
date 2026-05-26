@@ -1,3 +1,6 @@
+/**
+ * @deprecated Use modules/goals — mounted at /api/v1/goals via goalsRoutes.
+ */
 import * as goalService from "../services/goalService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";

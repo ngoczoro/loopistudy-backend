@@ -43,6 +43,13 @@ export {
   focusHistoryQuerySchema,
 } from "../modules/focus/focus.analytics.validation.js";
 
+export {
+  createGoalSchema,
+  goalIdParamSchema,
+  listGoalsQuerySchema,
+  updateGoalSchema,
+} from "../modules/goals/goals.validation.js";
+
 /**
  * Validate request body middleware
  */

@@ -6,6 +6,10 @@ import sequelize from "../../config/database.js";
 import ApiError from "../../utils/ApiError.js";
 import * as plannerRepository from "../planner/planner.repository.js";
 import * as subjectRepository from "../subjects/subject.repository.js";
+import {
+  createFocusSessionCompletedEvent,
+  dispatchProgressEvent,
+} from "../progress/index.js";
 import * as focusRepository from "./focus.repository.js";
 import { serializeFocusSession, serializeFocusSessionList } from "./focus.serializer.js";
 
@@ -466,6 +470,16 @@ export const completeSession = async (userId, sessionId, input = {}) => {
   });
 
   const withSubject = await attachSubject(updated, userId);
+
+  // Engagement orchestration — after DB update; coordinator errors are non-blocking.
+  dispatchProgressEvent(
+    createFocusSessionCompletedEvent(userId, {
+      sessionId: updated.id,
+      completedAt: updated.completedAt,
+      workElapsedSeconds: updated.workElapsedSeconds,
+    }),
+  );
+
   return serializeFocusSession(withSubject);
 };
 

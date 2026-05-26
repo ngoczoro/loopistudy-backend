@@ -14,6 +14,8 @@ export {
   getTrends,
   getSubjectStats,
   getStreak,
+  refreshFocusStreakCache,
+  calculateStreakFromDailyMap,
   getPlannerInsights,
   getFilteredHistory,
 } from "./focus.analytics.service.js";

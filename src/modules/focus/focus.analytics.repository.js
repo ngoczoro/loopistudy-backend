@@ -37,6 +37,10 @@ export const aggregateSummary = async (userId, { fromDate = null, toDate = null 
     `
     SELECT
       COUNT(*) FILTER (WHERE fs.status = 'completed')::int AS completed_count,
+      COUNT(*) FILTER (
+        WHERE fs.status = 'completed'
+          AND COALESCE(fs.work_elapsed_seconds, fs.actual_work_minutes * 60, 0) >= :minSessionSeconds
+      )::int AS qualifying_completed_count,
       COUNT(*) FILTER (WHERE fs.status = 'cancelled')::int AS abandoned_count,
       COUNT(*) FILTER (WHERE fs.status = 'completed')::int AS total_sessions,
       COALESCE(SUM(

@@ -10,6 +10,72 @@ import {
 
 const toNumber = (value) => Number(value);
 
+/** Standard interval overlap: (newStart < existEnd) && (newEnd > existStart) */
+const intervalsOverlap = (startA, endA, startB, endB) =>
+  startA < endB && endA > startB;
+
+const sessionOverlapsExisting = (
+  dayOfWeek,
+  startHour,
+  durationHours,
+  existingSessions,
+  excludeSessionId = null,
+) => {
+  const day = toNumber(dayOfWeek);
+  const start = toNumber(startHour);
+  const end = start + toNumber(durationHours);
+
+  if (Number.isNaN(day) || Number.isNaN(start) || Number.isNaN(end)) {
+    return false;
+  }
+
+  for (const existing of existingSessions) {
+    if (excludeSessionId && existing.id === excludeSessionId) {
+      continue;
+    }
+    if (toNumber(existing.dayOfWeek) !== day) {
+      continue;
+    }
+
+    const existStart = toNumber(existing.startHour);
+    const existEnd = existStart + toNumber(existing.durationHours);
+
+    if (intervalsOverlap(start, end, existStart, existEnd)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const assertNoOverlappingSession = async (
+  userId,
+  weekStartDate,
+  dayOfWeek,
+  startHour,
+  durationHours,
+  excludeSessionId = null,
+) => {
+  const sessions = await plannerRepository.findAllByUserAndWeek(
+    userId,
+    weekStartDate,
+  );
+
+  if (
+    sessionOverlapsExisting(
+      dayOfWeek,
+      startHour,
+      durationHours,
+      sessions,
+      excludeSessionId,
+    )
+  ) {
+    throw ApiError.badRequest(
+      "This time slot already has a study session. Please choose another time.",
+    );
+  }
+};
+
 const sessionOverlapsBlockedSlot = (
   dayOfWeek,
   startHour,
@@ -171,6 +237,13 @@ export const create = async (userId, input) => {
     input.startHour,
     input.durationHours,
   );
+  await assertNoOverlappingSession(
+    userId,
+    input.weekStartDate,
+    input.dayOfWeek,
+    input.startHour,
+    input.durationHours,
+  );
 
   const session = await plannerRepository.create(buildCreatePayload(userId, input));
   return serializePlannerSession(session);
@@ -187,8 +260,17 @@ export const update = async (userId, sessionId, input) => {
   const dayOfWeek = payload.dayOfWeek ?? session.dayOfWeek;
   const startHour = payload.startHour ?? session.startHour;
   const durationHours = payload.durationHours ?? session.durationHours;
+  const weekStartDate = payload.weekStartDate ?? session.weekStartDate;
 
   await assertNotBlocked(userId, dayOfWeek, startHour, durationHours);
+  await assertNoOverlappingSession(
+    userId,
+    weekStartDate,
+    dayOfWeek,
+    startHour,
+    durationHours,
+    session.id,
+  );
 
   const updated = await plannerRepository.update(session, payload);
   return serializePlannerSession(updated);

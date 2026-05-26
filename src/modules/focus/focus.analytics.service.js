@@ -139,6 +139,7 @@ export const getSummary = async (userId, query = {}) => {
     totalFocusSeconds: Number(row.total_focus_seconds ?? 0),
     totalFocusMinutes: Math.round(Number(row.total_focus_seconds ?? 0) / 60),
     completedCount: Number(row.completed_count ?? 0),
+    qualifyingCompletedCount: Number(row.qualifying_completed_count ?? 0),
     abandonedCount: Number(row.abandoned_count ?? 0),
     totalSessions: Number(row.total_sessions ?? 0),
     avgSessionMinutes: Math.round(Number(row.avg_session_seconds ?? 0) / 60),
@@ -208,8 +209,12 @@ export const getSubjectStats = async (userId, query = {}) => {
   }));
 };
 
-export const getStreak = async (userId) => {
-  const todayKey = toDateKey(new Date());
+/**
+ * Recompute focus day streak from completed sessions and upsert user_streaks.
+ * Shared by GET /analytics/streak and future engagement hooks (Phase 1+).
+ */
+export const refreshFocusStreakCache = async (userId, options = {}) => {
+  const todayKey = options.todayKey ?? toDateKey(new Date());
   const fromDate = addDays(todayKey, -364);
 
   const rows = await analyticsRepository.aggregateDailyStreakData(userId, {
@@ -225,7 +230,20 @@ export const getStreak = async (userId) => {
     ...persisted,
     todayQualifies: streakData.todayQualifies,
     todayFocusSeconds: streakData.todayFocusSeconds,
-    todayFocusMinutes: Math.round(streakData.todayFocusSeconds / 60),
+    minDaySeconds: streakData.minDaySeconds,
+  };
+};
+
+export const getStreak = async (userId) => {
+  const refreshed = await refreshFocusStreakCache(userId);
+
+  return {
+    currentStreak: refreshed.currentStreak,
+    longestStreak: refreshed.longestStreak,
+    lastStudyDate: refreshed.lastStudyDate,
+    todayQualifies: refreshed.todayQualifies,
+    todayFocusSeconds: refreshed.todayFocusSeconds,
+    todayFocusMinutes: Math.round(refreshed.todayFocusSeconds / 60),
     minDayMinutes: Math.round(FOCUS_ANALYTICS.MIN_STREAK_DAY_SECONDS / 60),
     recoveryNote:
       "Missing a day resets your current streak. Study at least the daily minimum to keep it going.",

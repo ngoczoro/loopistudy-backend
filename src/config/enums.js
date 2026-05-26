@@ -26,7 +26,23 @@ export const QUIZ_SOURCES = ["manual", "ai_generated"];
 
 export const GOAL_UNITS = ["hrs", "tasks", "chapters", "min"];
 
-export const GOAL_PERIODS = ["daily", "weekly"];
+/** Legacy DB CHECK may still be daily|weekly only; API allows monthly for forward compat. */
+export const GOAL_PERIODS = ["daily", "weekly", "monthly"];
+
+export const GOAL_METRIC_KEYS = [
+  "focus_seconds",
+  "completed_sessions",
+  "tasks_completed",
+  "streak_days",
+  "manual",
+];
+
+export const COMPUTED_GOAL_METRICS = [
+  "focus_seconds",
+  "completed_sessions",
+  "tasks_completed",
+  "streak_days",
+];
 
 export const OTP_TYPES = ["REGISTER", "FORGOT_PASSWORD"];
 
