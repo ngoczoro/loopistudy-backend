@@ -13,6 +13,7 @@ import { up as focusUnfinishedWorkspaceIndexes } from "./008_focus_unfinished_wo
 import { up as tasksPhase3Fields } from "./009_tasks_phase3_fields.js";
 import { up as focusSessionsOptionalSubject } from "./010_focus_sessions_optional_subject.js";
 import { up as schemaConsistencyFocusSessions } from "./011_schema_consistency_focus_sessions.js";
+import { up as securityEvents } from "./012_security_events.js";
 
 const migrations = [
   { name: "003_normalize_auth_enums", up: normalizeAuthEnums },
@@ -27,6 +28,7 @@ const migrations = [
   { name: "009_tasks_phase3_fields", up: tasksPhase3Fields },
   { name: "010_focus_sessions_optional_subject", up: focusSessionsOptionalSubject },
   { name: "011_schema_consistency_focus_sessions", up: schemaConsistencyFocusSessions },
+  { name: "012_security_events", up: securityEvents },
 ];
 
 const runMigrations = async () => {

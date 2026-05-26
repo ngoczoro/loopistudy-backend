@@ -1,5 +1,6 @@
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { buildSuccessResponse } from "../../utils/response.js";
+import { logAuthFailure } from "../../shared/security/securityAudit.service.js";
 import * as authService from "./auth.service.js";
 
 export const register = asyncHandler(async (req, res) => {
@@ -30,8 +31,15 @@ export const verifyOtp = asyncHandler(async (req, res) => {
 });
 
 export const login = asyncHandler(async (req, res) => {
-  const result = await authService.login(req.body);
-  res.json(buildSuccessResponse("Login successful", result));
+  try {
+    const result = await authService.login(req.body);
+    res.json(buildSuccessResponse("Login successful", result));
+  } catch (error) {
+    if (error?.statusCode === 401) {
+      await logAuthFailure(req, { email: req.body?.email ?? null });
+    }
+    throw error;
+  }
 });
 
 export const logout = asyncHandler(async (req, res) => {
