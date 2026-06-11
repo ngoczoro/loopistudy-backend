@@ -17,7 +17,10 @@ export const createSubjectSchema = Joi.object({
   name: Joi.string().min(2).max(150).required(),
   credits: Joi.number().integer().min(0).max(99).optional(),
   difficulty: difficultySchema.optional(),
-  examDate: Joi.date().iso().optional(),
+  examDate: Joi.date().iso().required().messages({
+    "any.required": "Exam date is required",
+    "date.format": "Exam date must be a valid ISO date (YYYY-MM-DD)",
+  }),
   color: Joi.string().max(30).optional(),
   priority: prioritySchema.optional(),
   requiredHoursPerWeek: Joi.number().min(0).max(168).optional(),

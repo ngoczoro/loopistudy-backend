@@ -1,169 +1,16 @@
 import ApiError from "../../utils/ApiError.js";
 import { assertOwned as assertSubjectOwned } from "../subjects/subject.service.js";
 import { getBlockedSlots } from "../users/user.service.js";
-import { dayLabelToNumber, DEFAULT_SOURCE } from "./planner.constants.js";
+import { DEFAULT_SOURCE } from "./planner.constants.js";
+import {
+  assertSessionNoOverlap,
+  assertSessionNotBlocked,
+} from "./planner.conflict.js";
 import * as plannerRepository from "./planner.repository.js";
 import {
   serializePlannerSession,
   serializePlannerSessionList,
 } from "./planner.serializer.js";
-
-const toNumber = (value) => Number(value);
-
-/** Standard interval overlap: (newStart < existEnd) && (newEnd > existStart) */
-const intervalsOverlap = (startA, endA, startB, endB) =>
-  startA < endB && endA > startB;
-
-const sessionOverlapsExisting = (
-  dayOfWeek,
-  startHour,
-  durationHours,
-  existingSessions,
-  excludeSessionId = null,
-) => {
-  const day = toNumber(dayOfWeek);
-  const start = toNumber(startHour);
-  const end = start + toNumber(durationHours);
-
-  if (Number.isNaN(day) || Number.isNaN(start) || Number.isNaN(end)) {
-    return false;
-  }
-
-  for (const existing of existingSessions) {
-    if (excludeSessionId && existing.id === excludeSessionId) {
-      continue;
-    }
-    if (toNumber(existing.dayOfWeek) !== day) {
-      continue;
-    }
-
-    const existStart = toNumber(existing.startHour);
-    const existEnd = existStart + toNumber(existing.durationHours);
-
-    if (intervalsOverlap(start, end, existStart, existEnd)) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const assertNoOverlappingSession = async (
-  userId,
-  weekStartDate,
-  dayOfWeek,
-  startHour,
-  durationHours,
-  excludeSessionId = null,
-) => {
-  const sessions = await plannerRepository.findAllByUserAndWeek(
-    userId,
-    weekStartDate,
-  );
-
-  if (
-    sessionOverlapsExisting(
-      dayOfWeek,
-      startHour,
-      durationHours,
-      sessions,
-      excludeSessionId,
-    )
-  ) {
-    throw ApiError.badRequest(
-      "This time slot already has a study session. Please choose another time.",
-    );
-  }
-};
-
-const sessionOverlapsBlockedSlot = (
-  dayOfWeek,
-  startHour,
-  durationHours,
-  blockedSlots,
-  { logContext = null } = {},
-) => {
-  const sessionDay = toNumber(dayOfWeek);
-  const start = toNumber(startHour);
-  const end = start + toNumber(durationHours);
-
-  if (logContext) {
-    console.log("[assertNotBlocked] session", {
-      ...logContext,
-      dayOfWeek,
-      sessionDay,
-      startHour,
-      durationHours,
-      start,
-      end,
-      startIsNaN: Number.isNaN(start),
-      endIsNaN: Number.isNaN(end),
-    });
-  }
-
-  for (const slot of blockedSlots) {
-    const slotDay =
-      typeof slot.day === "string" ? dayLabelToNumber(slot.day) : toNumber(slot.day);
-
-    if (slotDay === null || Number.isNaN(slotDay) || slotDay !== sessionDay) {
-      continue;
-    }
-
-    const blockedStart = toNumber(slot.hour);
-    const blockedEnd = blockedStart + 1;
-    const overlaps = start < blockedEnd && end > blockedStart;
-
-    if (logContext) {
-      console.log("[assertNotBlocked] compare", {
-        slotDay,
-        slotDayLabel: slot.day,
-        blockedHourRaw: slot.hour,
-        blockedHourType: typeof slot.hour,
-        blockedStart,
-        blockedEnd,
-        sessionStart: start,
-        sessionEnd: end,
-        overlaps,
-      });
-    }
-
-    if (overlaps) {
-      if (logContext) {
-        console.log("[assertNotBlocked] REJECT", {
-          reason: "interval_overlap",
-          slotDay,
-          blockedRange: [blockedStart, blockedEnd],
-          sessionRange: [start, end],
-        });
-      }
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const assertNotBlocked = async (userId, dayOfWeek, startHour, durationHours) => {
-  const blockedSlots = await getBlockedSlots(userId);
-  const logContext =
-    process.env.NODE_ENV === "development"
-      ? { userId, blockedSlotCount: blockedSlots.length }
-      : null;
-
-  if (
-    sessionOverlapsBlockedSlot(
-      dayOfWeek,
-      startHour,
-      durationHours,
-      blockedSlots,
-      { logContext },
-    )
-  ) {
-    throw ApiError.badRequest(
-      "This time overlaps a blocked slot in your availability settings",
-    );
-  }
-};
 
 const assertOwned = async (userId, sessionId) => {
   const session = await plannerRepository.findByIdAndUserId(sessionId, userId);
@@ -214,6 +61,33 @@ const buildUpdatePayload = (input) => {
   if (input.source !== undefined) payload.source = input.source;
 
   return payload;
+};
+
+const assertNoOverlappingSession = async (
+  userId,
+  weekStartDate,
+  dayOfWeek,
+  startHour,
+  durationHours,
+  excludeSessionId = null,
+) => {
+  const sessions = await plannerRepository.findAllByUserAndWeek(
+    userId,
+    weekStartDate,
+  );
+
+  assertSessionNoOverlap(
+    dayOfWeek,
+    startHour,
+    durationHours,
+    sessions,
+    excludeSessionId,
+  );
+};
+
+const assertNotBlocked = async (userId, dayOfWeek, startHour, durationHours) => {
+  const blockedSlots = await getBlockedSlots(userId);
+  assertSessionNotBlocked(dayOfWeek, startHour, durationHours, blockedSlots);
 };
 
 export const list = async (userId, weekStartDate) => {

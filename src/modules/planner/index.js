@@ -1,5 +1,6 @@
 export { default as plannerRoutes } from "./planner.routes.js";
 export { default as plannerSessionRoutes } from "./planner.routes.js";
+export { aiPlanRoutes } from "./ai-plan/index.js";
 export {
   create,
   getById,

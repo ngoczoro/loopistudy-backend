@@ -28,6 +28,13 @@ export {
 } from "../modules/planner/planner.validation.js";
 
 export {
+  analyzeDocumentSchema,
+  applyAiPlanSchema,
+  chatAiPlanSchema,
+  generateAiPlanSchema,
+} from "../modules/planner/ai-plan/ai-plan.validation.js";
+
+export {
   abandonFocusSessionSchema,
   completeFocusSessionSchema,
   createFocusSessionSchema,
