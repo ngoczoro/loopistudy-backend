@@ -16,6 +16,7 @@ import { up as schemaConsistencyFocusSessions } from "./011_schema_consistency_f
 import { up as studyGoalsMetricFields } from "./011_study_goals_metric_fields.js";
 import { up as securityEvents } from "./012_security_events.js";
 import { up as adminUserLockFields } from "./013_admin_user_lock_fields.js";
+import { up as documentSummaries } from "./014_document_summaries.js";
 
 const migrations = [
   { name: "003_normalize_auth_enums", up: normalizeAuthEnums },
@@ -33,6 +34,7 @@ const migrations = [
   { name: "011_study_goals_metric_fields", up: studyGoalsMetricFields },
   { name: "012_security_events", up: securityEvents },
   { name: "013_admin_user_lock_fields", up: adminUserLockFields },
+  { name: "014_document_summaries", up: documentSummaries },
 ];
 
 const runMigrations = async () => {

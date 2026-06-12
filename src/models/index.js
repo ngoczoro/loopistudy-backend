@@ -18,6 +18,7 @@ import { defineUserBadgeModel } from "./UserBadge.js";
 import { defineNotificationModel } from "./Notification.js";
 import { defineViolationModel } from "./Violation.js";
 import { defineAIRequestModel } from "./AIRequest.js";
+import { defineDocumentSummaryModel } from "./DocumentSummary.js";
 
 export const initializeModels = () => {
   const User = defineUserModel(sequelize);
@@ -39,6 +40,7 @@ export const initializeModels = () => {
   const Notification = defineNotificationModel(sequelize);
   const Violation = defineViolationModel(sequelize);
   const AIRequest = defineAIRequestModel(sequelize);
+  const DocumentSummary = defineDocumentSummaryModel(sequelize);
 
   // --- User ownership graph ---
   User.hasMany(RefreshToken, { foreignKey: "user_id", as: "refreshTokens" });
@@ -175,6 +177,24 @@ export const initializeModels = () => {
     as: "contentItem",
   });
 
+  ContentItem.hasOne(DocumentSummary, {
+    foreignKey: "document_id",
+    as: "documentSummary",
+  });
+  DocumentSummary.belongsTo(ContentItem, {
+    foreignKey: "document_id",
+    as: "contentItem",
+  });
+
+  User.hasMany(DocumentSummary, {
+    foreignKey: "created_by",
+    as: "documentSummaries",
+  });
+  DocumentSummary.belongsTo(User, {
+    foreignKey: "created_by",
+    as: "creator",
+  });
+
   // Backward-compatible alias for auth layer
   sequelize.models.EmailOtp = OtpCode;
 
@@ -199,6 +219,7 @@ export const initializeModels = () => {
     Notification,
     Violation,
     AIRequest,
+    DocumentSummary,
   };
 };
 
