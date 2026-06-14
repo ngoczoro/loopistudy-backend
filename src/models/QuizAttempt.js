@@ -20,6 +20,45 @@ export const defineQuizAttemptModel = (sequelize) => {
         allowNull: false,
         field: "user_id",
       },
+      answers: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      totalQuestions: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: "total_questions",
+      },
+      correctCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: "correct_count",
+      },
+      scorePercentage: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 0,
+        field: "score_percentage",
+      },
+      startedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "started_at",
+      },
+      submittedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+        field: "submitted_at",
+      },
+      durationSeconds: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "duration_seconds",
+      },
       score: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
@@ -30,12 +69,8 @@ export const defineQuizAttemptModel = (sequelize) => {
       },
       timeSpentSeconds: {
         type: DataTypes.INTEGER,
+        allowNull: true,
         field: "time_spent_seconds",
-      },
-      answers: {
-        type: DataTypes.JSONB,
-        allowNull: false,
-        defaultValue: {},
       },
     },
     modelOptions("quiz_attempts"),

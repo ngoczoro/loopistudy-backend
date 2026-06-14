@@ -35,6 +35,30 @@ export const defineQuizModel = (sequelize) => {
         defaultValue: "manual",
         validate: { isIn: [QUIZ_SOURCES] },
       },
+      sourceDocumentId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "source_document_id",
+      },
+      aiModel: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        field: "ai_model",
+      },
+      generationDifficulty: {
+        type: DataTypes.STRING(10),
+        allowNull: true,
+        field: "generation_difficulty",
+      },
+      generationQuestionCount: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "generation_question_count",
+      },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     modelOptions("quizzes", { paranoid: true }),
   );

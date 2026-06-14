@@ -8,9 +8,13 @@ export const AI_REQUEST_FIELDS = Object.freeze({
   numberOfQuestions: "numberOfQuestions",
 });
 
-/** Documented difficulty values for future quiz generation. */
+/** Documented difficulty values for quiz generation. */
 export const AI_DIFFICULTY_VALUES = Object.freeze([
+  "mixed",
   "easy",
   "medium",
   "hard",
 ]);
+
+/** Allowed AI quiz question counts. */
+export const AI_QUIZ_QUESTION_COUNTS = Object.freeze([5, 10, 15, 20]);

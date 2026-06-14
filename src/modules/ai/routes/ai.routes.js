@@ -6,8 +6,17 @@ import {
   getDocumentSummary,
 } from "../controllers/summary.controller.js";
 import {
+  generateDocumentQuiz,
+  generatePracticeQuiz,
+  generateSubjectQuiz,
+} from "../controllers/quiz-generator.controller.js";
+import {
   documentIdParamSchema,
+  generatePracticeQuizBodySchema,
+  generateQuizBodySchema,
+  generateSubjectQuizBodySchema,
   generateSummaryBodySchema,
+  subjectIdParamSchema,
 } from "../validators/ai.validation.js";
 
 const validateParams = (schema) => (req, res, next) => {
@@ -59,6 +68,26 @@ router.post(
   validateParams(documentIdParamSchema),
   validateBody(generateSummaryBodySchema),
   generateDocumentSummary,
+);
+
+router.post(
+  "/documents/:documentId/generate-quiz",
+  validateParams(documentIdParamSchema),
+  validateBody(generateQuizBodySchema),
+  generateDocumentQuiz,
+);
+
+router.post(
+  "/subjects/:subjectId/generate-quiz",
+  validateParams(subjectIdParamSchema),
+  validateBody(generateSubjectQuizBodySchema),
+  generateSubjectQuiz,
+);
+
+router.post(
+  "/generate-quiz",
+  validateBody(generatePracticeQuizBodySchema),
+  generatePracticeQuiz,
 );
 
 export default router;

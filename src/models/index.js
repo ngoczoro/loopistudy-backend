@@ -141,6 +141,15 @@ export const initializeModels = () => {
   Subject.hasMany(Quiz, { foreignKey: "subject_id", as: "quizzes" });
   Quiz.belongsTo(Subject, { foreignKey: "subject_id", as: "subject" });
 
+  ContentItem.hasMany(Quiz, {
+    foreignKey: "source_document_id",
+    as: "sourceQuizzes",
+  });
+  Quiz.belongsTo(ContentItem, {
+    foreignKey: "source_document_id",
+    as: "sourceDocument",
+  });
+
   Subject.hasMany(AIRequest, { foreignKey: "subject_id", as: "aiRequests" });
   AIRequest.belongsTo(Subject, { foreignKey: "subject_id", as: "subject" });
 

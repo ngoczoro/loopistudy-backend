@@ -1,12 +1,23 @@
 import * as quizService from "../services/quizService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
-import { buildSuccessResponse, getPaginationParams, buildPaginationResponse } from "../utils/response.js";
+import {
+  buildSuccessResponse,
+  getPaginationParams,
+  buildPaginationResponse,
+} from "../utils/response.js";
+import {
+  serializeQuiz,
+  serializeQuizList,
+} from "../serializers/quizSerializer.js";
 
 export const create = asyncHandler(async (req, res) => {
   const userId = req.user.userId;
   const result = await quizService.create(userId, req.body);
-  res.status(201).json(buildSuccessResponse("Quiz created successfully", result));
+
+  res
+    .status(201)
+    .json(buildSuccessResponse("Quiz created successfully", serializeQuiz(result)));
 });
 
 export const getAll = asyncHandler(async (req, res) => {
@@ -16,32 +27,75 @@ export const getAll = asyncHandler(async (req, res) => {
   delete filters.page;
   delete filters.limit;
 
-  const { count, rows } = await quizService.getAll(userId, limit, offset, filters);
+  const { count, rows } = await quizService.getAll(
+    userId,
+    limit,
+    offset,
+    filters,
+  );
   const pagination = buildPaginationResponse(rows, count, page, limit);
 
-  res.json(buildSuccessResponse("Quizs fetched successfully", pagination.data, pagination.pagination));
+  res.json(
+    buildSuccessResponse(
+      "Quizs fetched successfully",
+      serializeQuizList(pagination.data),
+      pagination.pagination,
+    ),
+  );
 });
 
 export const getById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.userId;
   const result = await quizService.getById(userId, id);
-  if (!result) throw ApiError.notFound("Quiz not found or you don't have permission");
-  res.json(buildSuccessResponse("Quiz fetched successfully", result));
+
+  if (!result) {
+    throw ApiError.notFound("Quiz not found or you don't have permission");
+  }
+
+  res.json(
+    buildSuccessResponse("Quiz fetched successfully", serializeQuiz(result)),
+  );
 });
 
 export const update = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.userId;
   const result = await quizService.update(userId, id, req.body);
-  if (!result) throw ApiError.notFound("Quiz not found or you don't have permission");
-  res.json(buildSuccessResponse("Quiz updated successfully", result));
+
+  if (!result) {
+    throw ApiError.notFound("Quiz not found or you don't have permission");
+  }
+
+  res.json(
+    buildSuccessResponse("Quiz updated successfully", serializeQuiz(result)),
+  );
+});
+
+export const patchTitle = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.userId;
+  const result = await quizService.update(userId, id, {
+    title: req.body.title,
+  });
+
+  if (!result) {
+    throw ApiError.notFound("Quiz not found or you don't have permission");
+  }
+
+  res.json(
+    buildSuccessResponse("Quiz renamed successfully", serializeQuiz(result)),
+  );
 });
 
 export const remove = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.userId;
   const success = await quizService.remove(userId, id);
-  if (!success) throw ApiError.notFound("Quiz not found or you don't have permission");
+
+  if (!success) {
+    throw ApiError.notFound("Quiz not found or you don't have permission");
+  }
+
   res.json(buildSuccessResponse("Quiz deleted successfully"));
 });

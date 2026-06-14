@@ -1,10 +1,8 @@
 import ApiError from "../../../utils/ApiError.js";
-import { ROLES } from "../../../config/constants.js";
-import { contentService } from "../../content/index.js";
-import { serializeContentItem } from "../../content/content.serializer.js";
 import { getOpenAIConfig } from "../ai.constants.js";
 import { buildSummaryPrompt } from "../prompts/summary.prompt.js";
 import * as summaryRepository from "../repositories/summary.repository.js";
+import { resolveAccessibleContent } from "../shared/contentAccess.js";
 import { serializeDocumentSummary } from "../serializers/summary.serializer.js";
 import * as aiProviderService from "./ai.provider.service.js";
 import { extractDocumentText } from "../utils/documentTextExtractor.js";
@@ -34,15 +32,6 @@ const validateAiSummaryPayload = (payload) => {
     learningNotes: normalizeStringArray(payload?.learningNotes, { maxItems: 5 }),
     keywords: normalizeStringArray(payload?.keywords, { maxItems: 10 }),
   };
-};
-
-const resolveAccessibleContent = async (userId, role, documentId) => {
-  if (role === ROLES.ADMIN) {
-    const item = await contentService.getByIdForAdmin(documentId);
-    return serializeContentItem(item);
-  }
-
-  return contentService.getById(userId, documentId);
 };
 
 export const getExistingSummary = async (userId, role, documentId) => {
