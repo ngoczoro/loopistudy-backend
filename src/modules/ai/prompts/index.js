@@ -14,6 +14,10 @@ export {
 } from "./document-recommendation.prompt.js";
 export { buildQaPrompt, QA_PROMPT_VERSION } from "./qa.prompt.js";
 export {
+  buildResourceRecommendationPrompt,
+  RESOURCE_RECOMMENDATION_PROMPT_VERSION,
+} from "./resource-recommendation.prompt.js";
+export {
   buildSemanticSearchPrompt,
   SEMANTIC_SEARCH_PROMPT_VERSION,
 } from "./semantic-search.prompt.js";

@@ -19,6 +19,7 @@ import { up as adminUserLockFields } from "./013_admin_user_lock_fields.js";
 import { up as documentSummaries } from "./014_document_summaries.js";
 import { up as quizAiGenerationFields } from "./015_quiz_ai_generation_fields.js";
 import { up as quizAttemptsEnhancements } from "./016_quiz_attempts_enhancements.js";
+import { up as aiLearningResources } from "./017_ai_learning_resources.js";
 
 const schema = () => process.env.DB_SCHEMA || "learning_app";
 
@@ -41,6 +42,7 @@ const migrations = [
   { name: "014_document_summaries", up: documentSummaries },
   { name: "015_quiz_ai_generation_fields", up: quizAiGenerationFields },
   { name: "016_quiz_attempts_enhancements", up: quizAttemptsEnhancements },
+  { name: "017_ai_learning_resources", up: aiLearningResources },
 ];
 
 const ensureMigrationsTable = async () => {

@@ -11,11 +11,29 @@ import {
   generateSubjectQuiz,
 } from "../controllers/quiz-generator.controller.js";
 import {
+  getResourceRecommendationHistory,
+  getResourceRecommendationHistoryById,
+  getResourceRecommendations,
+  regenerateResourceRecommendations,
+} from "../controllers/resource-recommendation.controller.js";
+import {
+  deleteSavedLearningResource,
+  getSavedLearningResources,
+  saveLearningResource,
+} from "../controllers/saved-learning-resource.controller.js";
+import {
   documentIdParamSchema,
   generatePracticeQuizBodySchema,
   generateQuizBodySchema,
   generateSubjectQuizBodySchema,
   generateSummaryBodySchema,
+  regenerateResourceRecommendationBodySchema,
+  resourceRecommendationHistoryIdParamSchema,
+  resourceRecommendationHistoryQuerySchema,
+  resourceRecommendationQuerySchema,
+  saveLearningResourceBodySchema,
+  savedLearningResourceIdParamSchema,
+  savedLearningResourceQuerySchema,
   subjectIdParamSchema,
 } from "../validators/ai.validation.js";
 
@@ -48,6 +66,24 @@ const validateBody = (schema) => (req, res, next) => {
   }
 
   req.body = value;
+  next();
+};
+
+const validateQuery = (schema) => (req, res, next) => {
+  const { error, value } = schema.validate(req.query, {
+    convert: true,
+    stripUnknown: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Validation error",
+      errors: error.details[0].message,
+    });
+  }
+
+  req.validatedQuery = value;
   next();
 };
 
@@ -88,6 +124,48 @@ router.post(
   "/generate-quiz",
   validateBody(generatePracticeQuizBodySchema),
   generatePracticeQuiz,
+);
+
+router.get(
+  "/resource-recommendations",
+  validateQuery(resourceRecommendationQuerySchema),
+  getResourceRecommendations,
+);
+
+router.post(
+  "/resource-recommendations/regenerate",
+  validateBody(regenerateResourceRecommendationBodySchema),
+  regenerateResourceRecommendations,
+);
+
+router.get(
+  "/resource-recommendations/history",
+  validateQuery(resourceRecommendationHistoryQuerySchema),
+  getResourceRecommendationHistory,
+);
+
+router.get(
+  "/resource-recommendations/history/:id",
+  validateParams(resourceRecommendationHistoryIdParamSchema),
+  getResourceRecommendationHistoryById,
+);
+
+router.post(
+  "/saved-learning-resources",
+  validateBody(saveLearningResourceBodySchema),
+  saveLearningResource,
+);
+
+router.get(
+  "/saved-learning-resources",
+  validateQuery(savedLearningResourceQuerySchema),
+  getSavedLearningResources,
+);
+
+router.delete(
+  "/saved-learning-resources/:id",
+  validateParams(savedLearningResourceIdParamSchema),
+  deleteSavedLearningResource,
 );
 
 export default router;

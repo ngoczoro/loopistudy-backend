@@ -19,6 +19,8 @@ import { defineNotificationModel } from "./Notification.js";
 import { defineViolationModel } from "./Violation.js";
 import { defineAIRequestModel } from "./AIRequest.js";
 import { defineDocumentSummaryModel } from "./DocumentSummary.js";
+import { defineAiResourceRecommendationHistoryModel } from "./AiResourceRecommendationHistory.js";
+import { defineSavedLearningResourceModel } from "./SavedLearningResource.js";
 
 export const initializeModels = () => {
   const User = defineUserModel(sequelize);
@@ -41,6 +43,9 @@ export const initializeModels = () => {
   const Violation = defineViolationModel(sequelize);
   const AIRequest = defineAIRequestModel(sequelize);
   const DocumentSummary = defineDocumentSummaryModel(sequelize);
+  const AiResourceRecommendationHistory =
+    defineAiResourceRecommendationHistoryModel(sequelize);
+  const SavedLearningResource = defineSavedLearningResourceModel(sequelize);
 
   // --- User ownership graph ---
   User.hasMany(RefreshToken, { foreignKey: "user_id", as: "refreshTokens" });
@@ -204,6 +209,40 @@ export const initializeModels = () => {
     as: "creator",
   });
 
+  User.hasMany(AiResourceRecommendationHistory, {
+    foreignKey: "user_id",
+    as: "resourceRecommendationHistories",
+  });
+  AiResourceRecommendationHistory.belongsTo(User, {
+    foreignKey: "user_id",
+    as: "user",
+  });
+  Subject.hasMany(AiResourceRecommendationHistory, {
+    foreignKey: "subject_id",
+    as: "resourceRecommendationHistories",
+  });
+  AiResourceRecommendationHistory.belongsTo(Subject, {
+    foreignKey: "subject_id",
+    as: "subject",
+  });
+
+  User.hasMany(SavedLearningResource, {
+    foreignKey: "user_id",
+    as: "savedLearningResources",
+  });
+  SavedLearningResource.belongsTo(User, {
+    foreignKey: "user_id",
+    as: "user",
+  });
+  Subject.hasMany(SavedLearningResource, {
+    foreignKey: "subject_id",
+    as: "savedLearningResources",
+  });
+  SavedLearningResource.belongsTo(Subject, {
+    foreignKey: "subject_id",
+    as: "subject",
+  });
+
   // Backward-compatible alias for auth layer
   sequelize.models.EmailOtp = OtpCode;
 
@@ -229,6 +268,8 @@ export const initializeModels = () => {
     Violation,
     AIRequest,
     DocumentSummary,
+    AiResourceRecommendationHistory,
+    SavedLearningResource,
   };
 };
 

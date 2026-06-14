@@ -6,6 +6,8 @@ import {
 
 const uuid = Joi.string().uuid();
 
+const optionalSubjectId = uuid.optional().allow(null, "").empty(null).empty("");
+
 /** Reusable fragments for future AI feature request validation. */
 export const aiDocumentIdSchema = Joi.object({
   documentId: uuid.required(),
@@ -82,4 +84,45 @@ export const generatePracticeQuizBodySchema = Joi.object({
     .valid(...AI_QUIZ_QUESTION_COUNTS)
     .default(5),
   forceRegenerate: Joi.boolean().default(true),
+});
+
+export const resourceRecommendationQuerySchema = Joi.object({
+  q: Joi.string().trim().min(2).max(100).required(),
+  limit: Joi.number().integer().min(1).max(10).default(5),
+  subjectId: uuid.optional(),
+});
+
+export const regenerateResourceRecommendationBodySchema = Joi.object({
+  q: Joi.string().trim().min(2).max(100).required(),
+  limit: Joi.number().integer().min(1).max(10).default(5),
+  subjectId: uuid.optional(),
+});
+
+export const resourceRecommendationHistoryQuerySchema = Joi.object({
+  limit: Joi.number().integer().min(1).max(20).default(5),
+  subjectId: uuid.optional(),
+});
+
+export const resourceRecommendationHistoryIdParamSchema = Joi.object({
+  id: uuid.required(),
+});
+
+export const saveLearningResourceBodySchema = Joi.object({
+  resourceId: Joi.string().trim().max(120).required(),
+  title: Joi.string().trim().max(255).required(),
+  type: Joi.string().trim().max(50).required(),
+  provider: Joi.string().trim().max(120).required(),
+  url: Joi.string().uri().required(),
+  reason: Joi.string().trim().max(500).allow("").optional(),
+  topics: Joi.array().items(Joi.string().trim().max(80)).max(20).optional(),
+  subjectId: optionalSubjectId,
+  sourceQuery: Joi.string().trim().max(100).allow("").optional(),
+});
+
+export const savedLearningResourceQuerySchema = Joi.object({
+  subjectId: optionalSubjectId,
+});
+
+export const savedLearningResourceIdParamSchema = Joi.object({
+  id: uuid.required(),
 });
