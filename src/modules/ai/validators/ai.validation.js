@@ -126,3 +126,32 @@ export const savedLearningResourceQuerySchema = Joi.object({
 export const savedLearningResourceIdParamSchema = Joi.object({
   id: uuid.required(),
 });
+
+export const documentSearchBodySchema = Joi.object({
+  query: Joi.string().trim().min(2).max(300).required(),
+  documentId: uuid.optional(),
+  subjectId: uuid.optional(),
+  limit: Joi.number().integer().min(1).max(10).default(5),
+})
+  .or("documentId", "subjectId")
+  .messages({
+    "object.missing": "Either documentId or subjectId is required",
+  });
+
+export const documentSearchExplainBodySchema = Joi.object({
+  query: Joi.string().trim().min(2).max(300).required(),
+  passages: Joi.array()
+    .items(
+      Joi.object({
+        documentId: uuid.required(),
+        documentTitle: Joi.string().trim().max(255).optional(),
+        subjectId: uuid.optional().allow(null),
+        subjectName: Joi.string().trim().max(120).optional(),
+        excerpt: Joi.string().trim().min(1).max(2000).required(),
+        score: Joi.number().min(0).max(1).optional(),
+      }),
+    )
+    .min(1)
+    .max(10)
+    .required(),
+});

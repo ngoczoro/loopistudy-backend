@@ -18,6 +18,11 @@ export {
   RESOURCE_RECOMMENDATION_PROMPT_VERSION,
 } from "./resource-recommendation.prompt.js";
 export {
+  buildDocumentSearchExplainPrompt,
+  buildDocumentSearchPrompt,
+  DOCUMENT_SEARCH_EXPLAIN_PROMPT_VERSION,
+} from "./document-search.prompt.js";
+export {
   buildSemanticSearchPrompt,
   SEMANTIC_SEARCH_PROMPT_VERSION,
 } from "./semantic-search.prompt.js";

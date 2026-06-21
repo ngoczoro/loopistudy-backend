@@ -21,8 +21,11 @@ import {
   getSavedLearningResources,
   saveLearningResource,
 } from "../controllers/saved-learning-resource.controller.js";
+import { searchDocuments, explainDocumentSearch } from "../controllers/document-search.controller.js";
 import {
   documentIdParamSchema,
+  documentSearchBodySchema,
+  documentSearchExplainBodySchema,
   generatePracticeQuizBodySchema,
   generateQuizBodySchema,
   generateSubjectQuizBodySchema,
@@ -124,6 +127,18 @@ router.post(
   "/generate-quiz",
   validateBody(generatePracticeQuizBodySchema),
   generatePracticeQuiz,
+);
+
+router.post(
+  "/document-search",
+  validateBody(documentSearchBodySchema),
+  searchDocuments,
+);
+
+router.post(
+  "/document-search/explain",
+  validateBody(documentSearchExplainBodySchema),
+  explainDocumentSearch,
 );
 
 router.get(
