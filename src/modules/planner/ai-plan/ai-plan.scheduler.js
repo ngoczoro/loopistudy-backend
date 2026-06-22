@@ -17,7 +17,8 @@ const SCHEDULE_START_HOUR = 8;
 const SCHEDULE_END_HOUR = 20;
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
-const DEFAULT_MAX_STUDY_HOURS_PER_DAY = 6;
+const DEFAULT_MAX_STUDY_HOURS_PER_DAY = 4;
+const RELAXED_DAILY_OVERFLOW_HOURS = 1;
 
 const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1 };
 const DIFFICULTY_WEIGHT = { Hard: 3, Medium: 2, Easy: 1 };
@@ -177,7 +178,7 @@ export const buildAnchorDays = (subjects) => {
   return map;
 };
 
-const circularDayDistance = (dayA, dayB) => {
+export const circularDayDistance = (dayA, dayB) => {
   const diff = Math.abs(dayA - dayB);
   return Math.min(diff, 7 - diff);
 };
@@ -229,10 +230,15 @@ const scoreSlot = ({
   if (existingDays.length === 0) {
     score += 30;
   } else {
-    const minGap = Math.min(...existingDays.map((d) => circularDayDistance(dayOfWeek, d)));
+    const minGap = Math.min(
+      ...existingDays.map((d) => circularDayDistance(dayOfWeek, d)),
+    );
     const idealGap = getIdealGap(sessionCount);
     const spacingScore = Math.max(0, 20 - Math.abs(minGap - idealGap) * 5);
     score += spacingScore;
+    // Prefer wider spacing between same-subject sessions (spaced repetition).
+    score += minGap * 6;
+    if (minGap <= 1) score -= 18;
   }
   const preferred = preferredHoursByDifficulty[subject.difficulty] ?? preferredHoursByDifficulty.Medium;
   if (preferred.includes(startHour)) score += 20;
@@ -357,7 +363,7 @@ const tryPlaceSession = ({
     preferredMinGap,
   });
 
-  if (dayOrder.length === 0) {
+  if (dayOrder.length === 0 && relaxedMode) {
     dayOrder = buildDayOrder({
       subjectId: subject.id,
       anchorDay,
@@ -369,13 +375,17 @@ const tryPlaceSession = ({
     });
   }
 
+  const effectiveMaxHours = relaxedMode
+    ? maxStudyHoursPerDay + RELAXED_DAILY_OVERFLOW_HOURS
+    : maxStudyHoursPerDay;
+
   const validSlots = [];
 
   for (const dayOfWeek of dayOrder) {
     if (isDayBlockedByConstraints(weekStartDate, dayOfWeek, constraints)) continue;
 
     const hoursOnDay = metrics.totalHours[dayOfWeek];
-    if (hoursOnDay + durationHours > maxStudyHoursPerDay) continue;
+    if (hoursOnDay + durationHours > effectiveMaxHours) continue;
 
     const daySessions = metrics.sessionsByDay[dayOfWeek];
 

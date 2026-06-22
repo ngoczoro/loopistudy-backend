@@ -53,6 +53,7 @@ export const generateAiPlanSchema = Joi.object({
   examDate: Joi.date().iso().optional(),
   schedulingOverrides: Joi.array().items(schedulingOverrideSchema).optional(),
   constraints: Joi.array().items(constraintSchema).optional(),
+  maxStudyHoursPerDay: Joi.number().min(1).max(12).optional(),
 });
 
 export const applyAiPlanSchema = Joi.object({
@@ -69,6 +70,7 @@ export const chatAiPlanSchema = Joi.object({
   subjectIds: Joi.array().items(uuidSchema).min(1).required(),
   schedulingOverrides: Joi.array().items(schedulingOverrideSchema).optional(),
   constraints: Joi.array().items(constraintSchema).optional(),
+  maxStudyHoursPerDay: Joi.number().min(1).max(12).optional(),
   planContext: Joi.object({
     weeklySummary: Joi.array().items(Joi.object().unknown(true)).optional(),
     subjects: Joi.array().items(Joi.object().unknown(true)).optional(),

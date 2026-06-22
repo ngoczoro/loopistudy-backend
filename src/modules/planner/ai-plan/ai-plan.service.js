@@ -98,6 +98,7 @@ export const generate = async (userId, input) => {
     existingSessions,
     scopeSubjectIds: subjectIds,
     constraints: input.constraints ?? [],
+    maxStudyHoursPerDay: input.maxStudyHoursPerDay,
   });
 
   return {
@@ -203,6 +204,7 @@ export const chat = async (userId, input) => {
     existingSessions,
     scopeSubjectIds: subjectIds,
     constraints,
+    maxStudyHoursPerDay: input.maxStudyHoursPerDay,
   });
 
   return {

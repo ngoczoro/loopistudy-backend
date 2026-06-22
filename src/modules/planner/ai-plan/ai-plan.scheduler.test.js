@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import {
   buildReplacePreview,
+  circularDayDistance,
   getMaxSubjectsPerDay,
   groupSessionsByWeek,
   runScheduler,
@@ -35,6 +36,19 @@ describe("getMaxSubjectsPerDay", () => {
     expect(getMaxSubjectsPerDay(7)).toBe(4);
     expect(getMaxSubjectsPerDay(10)).toBe(4);
     expect(getMaxSubjectsPerDay(11)).toBe(5);
+  });
+});
+
+describe("circularDayDistance", () => {
+  it("treats Sunday and Monday as 1 day apart", () => {
+    expect(circularDayDistance(6, 0)).toBe(1);
+    expect(circularDayDistance(0, 6)).toBe(1);
+  });
+
+  it("uses shortest path around the week", () => {
+    expect(circularDayDistance(0, 3)).toBe(3);
+    expect(circularDayDistance(0, 4)).toBe(3);
+    expect(circularDayDistance(1, 6)).toBe(2);
   });
 });
 
@@ -171,6 +185,106 @@ describe("runScheduler", () => {
       .reduce((sum, s) => sum + s.durationHours, 0);
 
     expect(weekOneHours).toBe(9);
+  });
+
+  it("prefers wider gaps between same-subject sessions in a week", () => {
+    const { sessions } = runScheduler({
+      subjects: [makeSubject("sub-1", "Math", 4)],
+      planStart: "2026-06-08",
+      blockedSlots: [],
+      existingSessions: [],
+      scopeSubjectIds: ["sub-1"],
+      constraints: [],
+    });
+
+    const weekOne = sessions
+      .filter((s) => s.weekStartDate === "2026-06-08")
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+
+    expect(weekOne.length).toBeGreaterThanOrEqual(2);
+    const gap = circularDayDistance(weekOne[0].dayOfWeek, weekOne[1].dayOfWeek);
+    expect(gap).toBeGreaterThan(1);
+  });
+
+  it("does not exceed max study hours per day in strict scheduling", () => {
+    const subjects = [
+      makeSubject("sub-1", "Math", 6),
+      makeSubject("sub-2", "Physics", 6),
+      makeSubject("sub-3", "Chemistry", 6),
+    ];
+
+    const { sessions } = runScheduler({
+      subjects,
+      planStart: "2026-06-08",
+      blockedSlots: [],
+      existingSessions: [],
+      scopeSubjectIds: subjects.map((s) => s.id),
+      constraints: [],
+      maxStudyHoursPerDay: 4,
+    });
+
+    const weekOne = sessions.filter((s) => s.weekStartDate === "2026-06-08");
+    const hoursByDay = new Map();
+    for (const session of weekOne) {
+      hoursByDay.set(
+        session.dayOfWeek,
+        (hoursByDay.get(session.dayOfWeek) ?? 0) + session.durationHours,
+      );
+    }
+
+    for (const hours of hoursByDay.values()) {
+      expect(hours).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("uses relaxed pass to place sessions when strict daily cap blocks placement", () => {
+    const weekStart = "2026-06-08";
+    const blockOtherDays = [1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+      type: "BLOCK_DAY",
+      dayOfWeek,
+      weekStartDate: weekStart,
+    }));
+
+    const subject = {
+      ...makeSubject("sub-1", "Math", 2),
+      difficulty: "Hard",
+    };
+
+    const { sessions, warnings } = runScheduler({
+      subjects: [subject],
+      planStart: weekStart,
+      blockedSlots: [],
+      existingSessions: [
+        {
+          weekStartDate: weekStart,
+          dayOfWeek: 0,
+          startHour: 8,
+          durationHours: 2,
+          source: "manual",
+          subjectId: null,
+        },
+        {
+          weekStartDate: weekStart,
+          dayOfWeek: 0,
+          startHour: 11,
+          durationHours: 1,
+          source: "manual",
+          subjectId: null,
+        },
+      ],
+      scopeSubjectIds: ["sub-1"],
+      constraints: blockOtherDays,
+      maxStudyHoursPerDay: 4,
+    });
+
+    const weekOne = sessions.filter((s) => s.weekStartDate === weekStart);
+    expect(weekOne.length).toBe(1);
+    expect(warnings.filter((w) => w.includes("could not place"))).toHaveLength(0);
+    expect(weekOne[0].dayOfWeek).toBe(0);
+
+    const mondayHours = 3 + weekOne[0].durationHours;
+    expect(mondayHours).toBeGreaterThan(4);
+    expect(mondayHours).toBeLessThanOrEqual(5);
   });
 });
 
