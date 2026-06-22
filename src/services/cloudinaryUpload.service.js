@@ -1,36 +1,31 @@
+import fs from "fs";
 import cloudinary, {
   assertCloudinaryConfigured,
 } from "../shared/config/cloudinary.js";
 import ApiError from "../utils/ApiError.js";
-import { getExtension } from "../shared/utils/contentFileTypes.js";
 
 export const CLOUDINARY_FOLDER = "loopi-study/materials";
 
 const mapCloudinaryError = (error) => {
-  const message =
-    error?.message ||
-    error?.error?.message ||
-    "Cloudinary upload failed";
-
+  const message = error?.message || error?.error?.message || "Cloudinary upload failed";
   if (/Must supply api_key|Invalid cloud_name|Unknown API key/i.test(message)) {
     return ApiError.internalServer(
       "Cloudinary is not configured correctly. Check CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in .env",
     );
   }
-
   return ApiError.internalServer(message);
 };
 
-const uploadToCloudinary = async (file, options) => {
+// Hàm bổ trợ cốt lõi: Nhận fileSource (có thể là path hoặc chuỗi base64) để đẩy lên Cloudinary
+const uploadToCloudinary = async (fileSource, options) => {
   assertCloudinaryConfigured();
 
-  if (!file?.path) {
-    throw ApiError.badRequest("Uploaded file path is missing");
+  if (!fileSource) {
+    throw ApiError.badRequest("Uploaded file source is missing");
   }
 
   try {
-    const result = await cloudinary.uploader.upload(file.path, options);
-
+    const result = await cloudinary.uploader.upload(fileSource, options);
     return {
       secureUrl: result.secure_url,
       publicId: result.public_id,
@@ -40,19 +35,34 @@ const uploadToCloudinary = async (file, options) => {
   }
 };
 
-export const uploadImageToCloudinary = async (file) =>
-  uploadToCloudinary(file, {
+// 1. Upload hình ảnh (giữ nguyên logic dùng file.path gốc của bạn)
+export const uploadImageToCloudinary = async (file) => {
+  if (!file?.path) throw ApiError.badRequest("Uploaded file path is missing");
+  
+  return uploadToCloudinary(file.path, {
     folder: CLOUDINARY_FOLDER,
     resource_type: "image",
   });
+};
 
+// 2. Upload tài liệu PDF/Word/Excel (Bảo mật bằng Base64 để tránh lỗi mất cấu trúc file thô)
 export const uploadDocumentToCloudinary = async (file) => {
-  const extension = getExtension(file.originalname);
+  let fileBuffer;
+  
+  if (file?.buffer) {
+    fileBuffer = file.buffer;
+  } else if (file?.path) {
+    fileBuffer = fs.readFileSync(file.path);
+  } else {
+    throw ApiError.badRequest("File data is missing or corrupted");
+  }
 
-  return uploadToCloudinary(file, {
+  const mimeType = file.mimetype || "application/pdf";
+  const base64File = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+
+  return uploadToCloudinary(base64File, {
     folder: CLOUDINARY_FOLDER,
-    resource_type: "raw",
-    ...(extension ? { format: extension } : {}),
+    resource_type: "raw", 
   });
 };
 

@@ -5,6 +5,7 @@ import {
   fetchDocPreview,
   fetchExcelPreview,
   fetchTextContent,
+  fetchPdfPreview, // Bước 2: Import hàm xử lý PDF mới
 } from "../../../services/contentPreview.service.js";
 import * as contentRepository from "../../content/content.repository.js";
 import { assertOwned as assertSubjectOwned } from "../../subjects/subject.service.js";
@@ -12,8 +13,11 @@ import { serializeSubject } from "../../subjects/subject.serializer.js";
 import { toDateOnly } from "./ai-plan.weekUtils.js";
 import { isAiPlanMockEnabled } from "./ai-plan.constants.js";
 
-const CHAPTER_PATTERN = /^(?:chương|chapter|module|week|bài|unit)\s*[\d.:)-]/i;
+// Bước 5: Cập nhật CHAPTER_PATTERN linh hoạt hơn cho các định dạng bảng
+const CHAPTER_PATTERN = /^(?:chương|chapter|module|week|bài|unit)\s*\d*/i;
 const NUMBERED_SECTION = /^\d+[\).:\-]\s+\S+/;
+// Bước 5: Thêm pattern để bắt các hàng tiêu đề trong bảng (Ví dụ: Week 1 Introduction...)
+const TABLE_TOPIC_PATTERN = /^(?:week\s*\d+|\d+)\s+[A-Za-zÀ-ỹ]/i;
 
 const HARD_KEYWORDS = [
   "chứng minh",
@@ -59,7 +63,13 @@ const extractTopics = (text) => {
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.length > 120) continue;
-    if (CHAPTER_PATTERN.test(trimmed) || NUMBERED_SECTION.test(trimmed)) {
+    
+    // Bước 5: Bổ sung TABLE_TOPIC_PATTERN vào điều kiện kiểm tra
+    if (
+      CHAPTER_PATTERN.test(trimmed) || 
+      NUMBERED_SECTION.test(trimmed) || 
+      TABLE_TOPIC_PATTERN.test(trimmed)
+    ) {
       topics.push(trimmed.replace(/\s+/g, " "));
     }
   }
@@ -126,10 +136,10 @@ export const extractDocumentText = async (item) => {
       .join("\n");
   }
 
+  // Bước 3: Thay thế đoạn chặn lỗi thành đoạn xử lý PDF thực tế
   if (ext === "pdf") {
-    throw ApiError.badRequest(
-      "PDF syllabus analysis is not supported yet. Upload DOCX or TXT for now.",
-    );
+    const preview = await fetchPdfPreview(item);
+    return preview.text || "";
   }
 
   throw ApiError.badRequest(
@@ -137,9 +147,15 @@ export const extractDocumentText = async (item) => {
   );
 };
 
+// Bước 4: Tối ưu hóa lại hàm phân tích text, giữ cấu trúc xuống dòng để đọc bảng PDF chuẩn hơn
 export const analyzeDocumentText = (text, { title = "Document" } = {}) => {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  const topics = extractTopics(text);
+  const normalized = text
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+  // Truyền chuỗi văn bản đã normalize giữ dòng vào các hàm bổ trợ
+  const topics = extractTopics(normalized);
   const examDate = extractExamDate(normalized);
   const difficulty = estimateDifficulty(normalized, topics.length);
   const hoursPerWeek = estimateHoursPerWeek(normalized, topics.length, difficulty);
