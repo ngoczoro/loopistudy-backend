@@ -3,6 +3,7 @@ export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export const DEFAULT_POMODORO_DURATION_MIN = 25;
 export const DEFAULT_BREAK_DURATION_MIN = 5;
+export const DEFAULT_MAX_STUDY_HOURS_PER_DAY = 4;
 
 export const dayLabelToNumber = (day) => {
   const index = DAY_LABELS.indexOf(day);

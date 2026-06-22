@@ -4,6 +4,7 @@ import { revokeAllUserRefreshTokens } from "../auth/auth.service.js";
 import {
   dayLabelToNumber,
   DEFAULT_BREAK_DURATION_MIN,
+  DEFAULT_MAX_STUDY_HOURS_PER_DAY,
   DEFAULT_POMODORO_DURATION_MIN,
 } from "./user.constants.js";
 import * as userRepository from "./user.repository.js";
@@ -27,6 +28,7 @@ const getOrCreatePreferences = async (userId) =>
   userRepository.findOrCreatePreferences(userId, {
     pomodoroDurationMin: DEFAULT_POMODORO_DURATION_MIN,
     breakDurationMin: DEFAULT_BREAK_DURATION_MIN,
+    maxStudyHoursPerDay: DEFAULT_MAX_STUDY_HOURS_PER_DAY,
   });
 
 const buildProfileUpdatePayload = (input) => {
@@ -68,6 +70,10 @@ const buildPreferencesUpdatePayload = (input) => {
 
   if (input.notifications?.deadlineAlerts !== undefined) {
     payload.notifyDeadlineAlerts = input.notifications.deadlineAlerts;
+  }
+
+  if (input.maxStudyHoursPerDay !== undefined) {
+    payload.maxStudyHoursPerDay = input.maxStudyHoursPerDay;
   }
 
   return payload;

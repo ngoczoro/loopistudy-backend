@@ -1,5 +1,6 @@
 import { dayLabelToNumber } from "../../users/user.constants.js";
 import { EXAM_BUFFER_DAYS } from "./ai-plan.constants.js";
+import { DEFAULT_MAX_STUDY_HOURS_PER_DAY } from "../../users/user.constants.js";
 import {
   addDays,
   enumerateWeeks,
@@ -17,7 +18,6 @@ const SCHEDULE_START_HOUR = 8;
 const SCHEDULE_END_HOUR = 20;
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
-const DEFAULT_MAX_STUDY_HOURS_PER_DAY = 4;
 const RELAXED_DAILY_OVERFLOW_HOURS = 1;
 
 const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1 };

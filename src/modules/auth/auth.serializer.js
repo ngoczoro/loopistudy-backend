@@ -55,6 +55,7 @@ export const serializeRefreshTokens = (accessToken, refreshToken) => ({
 export const serializeUserPreferences = (prefs) => ({
   pomodoroDuration: prefs?.pomodoroDurationMin ?? 25,
   breakDuration: prefs?.breakDurationMin ?? 5,
+  maxStudyHoursPerDay: Number(prefs?.maxStudyHoursPerDay ?? 4),
   notifications: {
     taskReminders: prefs?.notifyTaskReminders ?? true,
     sessionReminders: prefs?.notifySessionReminders ?? true,

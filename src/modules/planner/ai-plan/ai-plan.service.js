@@ -1,8 +1,9 @@
 import ApiError from "../../../utils/ApiError.js";
-import { getBlockedSlots } from "../../users/user.service.js";
+import { getBlockedSlots, getPreferences } from "../../users/user.service.js";
 import { assertOwned as assertSubjectOwned } from "../../subjects/subject.service.js";
 import { serializeSubject } from "../../subjects/subject.serializer.js";
 import * as plannerRepository from "../planner.repository.js";
+import { resolveMaxStudyHoursPerDay } from "../planner.schedulingPrefs.js";
 import { EXAM_BUFFER_DAYS } from "./ai-plan.constants.js";
 import {
   buildPlanSummary,
@@ -59,6 +60,14 @@ const serializeExistingSessions = (sessions) =>
     subjectId: session.subjectId ?? null,
   }));
 
+const loadMaxStudyHoursPerDay = async (userId, requestValue) => {
+  const prefs = await getPreferences(userId);
+  return resolveMaxStudyHoursPerDay({
+    requestValue,
+    savedValue: prefs.maxStudyHoursPerDay,
+  });
+};
+
 /**
  * Generate a multi-week study plan preview.
  */
@@ -90,6 +99,10 @@ export const generate = async (userId, input) => {
     toWeek,
   );
   const existingSessions = serializeExistingSessions(existingRows);
+  const maxStudyHoursPerDay = await loadMaxStudyHoursPerDay(
+    userId,
+    input.maxStudyHoursPerDay,
+  );
 
   const { sessions, warnings } = runScheduler({
     subjects,
@@ -98,7 +111,7 @@ export const generate = async (userId, input) => {
     existingSessions,
     scopeSubjectIds: subjectIds,
     constraints: input.constraints ?? [],
-    maxStudyHoursPerDay: input.maxStudyHoursPerDay,
+    maxStudyHoursPerDay,
   });
 
   return {
@@ -196,6 +209,10 @@ export const chat = async (userId, input) => {
     toWeek,
   );
   const existingSessions = serializeExistingSessions(existingRows);
+  const maxStudyHoursPerDay = await loadMaxStudyHoursPerDay(
+    userId,
+    input.maxStudyHoursPerDay,
+  );
 
   const { sessions, warnings } = runScheduler({
     subjects,
@@ -204,7 +221,7 @@ export const chat = async (userId, input) => {
     existingSessions,
     scopeSubjectIds: subjectIds,
     constraints,
-    maxStudyHoursPerDay: input.maxStudyHoursPerDay,
+    maxStudyHoursPerDay,
   });
 
   return {

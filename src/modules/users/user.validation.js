@@ -25,6 +25,7 @@ export const updateProfileSchema = Joi.object({
 export const updatePreferencesSchema = Joi.object({
   pomodoroDuration: Joi.number().integer().min(1).max(180).optional(),
   breakDuration: Joi.number().integer().min(1).max(60).optional(),
+  maxStudyHoursPerDay: Joi.number().min(1).max(12).optional(),
   notifications: notificationSchema.optional(),
 })
   .min(1)

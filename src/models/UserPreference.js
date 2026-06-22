@@ -35,6 +35,11 @@ export const defineUserPreferenceModel = (sequelize) => {
         defaultValue: true,
         field: "notify_deadline_alerts",
       },
+      maxStudyHoursPerDay: {
+        type: DataTypes.DECIMAL(4, 1),
+        defaultValue: 4,
+        field: "max_study_hours_per_day",
+      },
     },
     modelOptions("user_preferences"),
   );
