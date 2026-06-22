@@ -31,8 +31,11 @@ const enrichGoal = async (userId, goal) => {
 };
 
 export const list = async (userId, query = {}) => {
+  const includeInactive =
+    query.includeInactive === true || query.includeInactive === "true";
+
   const rows = await goalsRepository.findAllActiveByUser(userId, {
-    includeInactive: query.includeInactive === true,
+    includeInactive,
   });
 
   const items = await Promise.all(rows.map((row) => enrichGoal(userId, row)));

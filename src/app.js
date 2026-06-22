@@ -42,7 +42,6 @@ app.get("/", (req, res) => {
     endpoints: {
       auth: "/api/v1/auth",
       subjects: "/api/v1/subjects",
-      pomodoro: "/api/v1/pomodoro",
       focusSessions: "/api/v1/focus-sessions",
       health: "/health",
     },

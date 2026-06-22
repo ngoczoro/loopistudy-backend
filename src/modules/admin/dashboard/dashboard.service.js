@@ -2,6 +2,7 @@ import * as dashboardRepository from "./dashboard.repository.js";
 import {
   serializeDashboardStats,
   serializeRecentContentList,
+  serializeWeeklyActivity,
 } from "./dashboard.serializer.js";
 
 export const getDashboardStats = async () => {
@@ -28,4 +29,9 @@ export const getDashboardStats = async () => {
 export const getRecentContent = async (limit = 10) => {
   const items = await dashboardRepository.fetchRecentContent(limit);
   return serializeRecentContentList(items);
+};
+
+export const getWeeklyActivity = async () => {
+  const rows = await dashboardRepository.fetchWeeklyActivity();
+  return serializeWeeklyActivity(rows);
 };

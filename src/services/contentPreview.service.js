@@ -1,6 +1,6 @@
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
-import pdf from "pdf-parse"; // Bước 1: Import thư viện pdf-parse đã install
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import ApiError from "../utils/ApiError.js";
 import { getExtension, isTextFile } from "../shared/utils/contentFileTypes.js";
 
@@ -112,7 +112,7 @@ export const fetchPdfPreview = async (item) => {
     const buffer = await fetchFileBuffer(item.fileUrl);
     
     // Parse text từ buffer sử dụng gói thư viện pdf-parse
-    const data = await pdf(buffer);
+    const data = await pdfParse(buffer);
 
     return {
       text: data.text || "",

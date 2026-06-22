@@ -17,3 +17,11 @@ export const getRecentContent = asyncHandler(async (req, res) => {
     data,
   });
 });
+
+export const getWeeklyActivity = asyncHandler(async (_req, res) => {
+  const data = await dashboardService.getWeeklyActivity();
+  res.json({
+    success: true,
+    data,
+  });
+});
