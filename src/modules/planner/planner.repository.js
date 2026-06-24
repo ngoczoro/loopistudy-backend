@@ -35,6 +35,11 @@ export const remove = async (session) => {
   return session.destroy();
 };
 
+export const deleteAllByUserId = async (userId) => {
+  const { PlannerSession } = models();
+  return PlannerSession.destroy({ where: { userId } });
+};
+
 export const findByUserWeekRange = async (userId, fromWeek, toWeek) => {
   const { PlannerSession } = models();
   return PlannerSession.findAll({

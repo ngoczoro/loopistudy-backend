@@ -27,7 +27,6 @@
   "author": "Your Team",
   "license": "MIT",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "axios": "^1.18.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^1.41.3",

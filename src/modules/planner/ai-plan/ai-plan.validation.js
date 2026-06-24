@@ -16,6 +16,9 @@ const schedulingOverrideSchema = Joi.object({
     .valid(...SUBJECT_DIFFICULTIES)
     .optional(),
   hoursPerWeek: Joi.number().min(0).max(168).optional(),
+  priority: Joi.string()
+    .valid(...PRIORITIES)
+    .optional(),
   examDate: Joi.date().iso().optional(),
 });
 

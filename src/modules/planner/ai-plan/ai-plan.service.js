@@ -1,4 +1,3 @@
-import ApiError from "../../../utils/ApiError.js";
 import { getBlockedSlots, getPreferences } from "../../users/user.service.js";
 import { assertOwned as assertSubjectOwned } from "../../subjects/subject.service.js";
 import { serializeSubject } from "../../subjects/subject.serializer.js";
@@ -15,14 +14,10 @@ import {
 import { getPlanEndDate, getWeekStartDate, toDateOnly } from "./ai-plan.weekUtils.js";
 import { applyAiPlanSessions } from "./ai-plan.apply.js";
 import { analyzeContentDocument } from "./ai-plan.analyze.js";
-import { isAiPlanMockEnabled } from "./ai-plan.constants.js";
-import { parseChatWithGemini } from "./ai-plan.gemini.js";
+import { isAiPlanLlmEnabled } from "./ai-plan.constants.js";
+import { parseChatWithOpenAI } from "./ai-plan.openai.js";
 import { parseChatHeuristic } from "./ai-plan.chat-heuristic.js";
 import { applyChatIntents } from "./ai-plan.intent.js";
-
-const notImplemented = (feature, phase) => {
-  throw new ApiError(501, `${feature} is not implemented yet (${phase})`);
-};
 
 const applySchedulingOverrides = (subject, overrides = []) => {
   const override = overrides.find((item) => item.subjectId === subject.id);
@@ -34,6 +29,7 @@ const applySchedulingOverrides = (subject, overrides = []) => {
     ...(override.hoursPerWeek != null
       ? { requiredHoursPerWeek: override.hoursPerWeek }
       : {}),
+    ...(override.priority ? { priority: override.priority } : {}),
     ...(override.examDate ? { examDate: toDateOnly(override.examDate) } : {}),
   };
 };
@@ -139,22 +135,22 @@ export const chat = async (userId, input) => {
     schedulingOverrides,
   );
 
-  if (isAiPlanMockEnabled()) {
-    notImplemented("AI plan chat", "Phase 4 — set STUDY_PLAN_AI_MOCK=false and GEMINI_API_KEY");
-  }
-
   let chatResult;
-  try {
-    chatResult = await parseChatWithGemini(input.message, {
-      subjects,
-      constraints,
-      planContext: input.planContext,
-    });
-  } catch (error) {
-    console.error(
-      "[ai-plan] Gemini chat failed, using heuristic fallback:",
-      error.message,
-    );
+  if (isAiPlanLlmEnabled()) {
+    try {
+      chatResult = await parseChatWithOpenAI(input.message, {
+        subjects,
+        constraints,
+        planContext: input.planContext,
+      });
+    } catch (error) {
+      console.error(
+        "[ai-plan] OpenAI chat failed, using heuristic fallback:",
+        error.message,
+      );
+      chatResult = parseChatHeuristic(input.message, { subjects, constraints });
+    }
+  } else {
     chatResult = parseChatHeuristic(input.message, { subjects, constraints });
   }
 

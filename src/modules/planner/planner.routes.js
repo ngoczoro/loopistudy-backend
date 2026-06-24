@@ -1,7 +1,14 @@
 import { Router } from "express";
 import { verifyTokenMiddleware } from "../../middlewares/authMiddleware.js";
 import { validateBody, validateQuery } from "../../validations/schemas.js";
-import { create, getById, list, remove, update } from "./planner.controller.js";
+import {
+  clearAll,
+  create,
+  getById,
+  list,
+  remove,
+  update,
+} from "./planner.controller.js";
 import {
   createPlannerSessionSchema,
   listPlannerSessionsQuerySchema,
@@ -29,6 +36,7 @@ router.use(verifyTokenMiddleware);
 
 router.get("/", validateQuery(listPlannerSessionsQuerySchema), list);
 router.post("/", validateBody(createPlannerSessionSchema), create);
+router.delete("/all", clearAll);
 router.get("/:id", validateParams(plannerSessionIdParamSchema), getById);
 router.patch(
   "/:id",

@@ -32,3 +32,10 @@ export const remove = asyncHandler(async (req, res) => {
   await plannerService.remove(req.user.userId, req.params.id);
   res.json(buildSuccessResponse("Planner session deleted successfully"));
 });
+
+export const clearAll = asyncHandler(async (req, res) => {
+  const data = await plannerService.clearAll(req.user.userId);
+  res.json(
+    buildSuccessResponse("All planner sessions deleted successfully", data),
+  );
+});

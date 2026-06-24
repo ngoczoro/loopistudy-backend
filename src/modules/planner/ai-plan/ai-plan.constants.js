@@ -20,14 +20,18 @@ export const PLAN_CONSTRAINT_TYPES = [
 /** Days from exam date to stop scheduling new sessions */
 export const EXAM_BUFFER_DAYS = 7;
 
-/** Env: STUDY_PLAN_AI_MOCK=false enables Gemini (requires GEMINI_API_KEY) */
-export const isAiPlanMockEnabled = () =>
-  process.env.STUDY_PLAN_AI_MOCK !== "false";
+import { getOpenAIConfig } from "../../ai/ai.constants.js";
 
-export const getGeminiConfig = () => ({
-  apiKey: process.env.GEMINI_API_KEY?.trim() || "",
-  model: process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash",
-});
+/** Explicit opt-in to heuristic-only mode (skips OpenAI). */
+export const isAiPlanMockEnabled = () =>
+  process.env.STUDY_PLAN_AI_MOCK === "true";
+
+/** OpenAI available for plan chat and document analyze. */
+export const isAiPlanLlmEnabled = () => {
+  if (isAiPlanMockEnabled()) return false;
+  const { apiKey } = getOpenAIConfig();
+  return Boolean(apiKey);
+};
 
 export const PHASE_STATUS = {
   PENDING_SCHEDULER: "pending_phase_1",

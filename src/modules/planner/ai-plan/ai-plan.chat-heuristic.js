@@ -66,7 +66,7 @@ const parseHoursPerWeek = (message) => {
 };
 
 /**
- * Rule-based chat parser used when Gemini is unavailable.
+ * Rule-based chat parser used when OpenAI is unavailable.
  */
 export const parseChatHeuristic = (
   message,

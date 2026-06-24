@@ -11,7 +11,7 @@ import * as contentRepository from "../../content/content.repository.js";
 import { assertOwned as assertSubjectOwned } from "../../subjects/subject.service.js";
 import { serializeSubject } from "../../subjects/subject.serializer.js";
 import { toDateOnly } from "./ai-plan.weekUtils.js";
-import { isAiPlanMockEnabled } from "./ai-plan.constants.js";
+import { isAiPlanLlmEnabled } from "./ai-plan.constants.js";
 
 // Bước 5: Cập nhật CHAPTER_PATTERN linh hoạt hơn cho các định dạng bảng
 const CHAPTER_PATTERN = /^(?:chương|chapter|module|week|bài|unit)\s*\d*/i;
@@ -192,19 +192,19 @@ export const analyzeContentDocument = async (userId, documentId) => {
   }
 
   let analysis;
-  if (isAiPlanMockEnabled()) {
-    analysis = analyzeDocumentText(text, { title: item.title });
-  } else {
+  if (isAiPlanLlmEnabled()) {
     try {
-      const { analyzeDocumentWithGemini } = await import("./ai-plan.gemini.js");
-      analysis = await analyzeDocumentWithGemini(text, { title: item.title });
+      const { analyzeDocumentWithOpenAI } = await import("./ai-plan.openai.js");
+      analysis = await analyzeDocumentWithOpenAI(text, { title: item.title });
     } catch (error) {
       console.error(
-        "[ai-plan] Gemini analyze failed, using heuristic fallback:",
+        "[ai-plan] OpenAI analyze failed, using heuristic fallback:",
         error.message,
       );
       analysis = analyzeDocumentText(text, { title: item.title });
     }
+  } else {
+    analysis = analyzeDocumentText(text, { title: item.title });
   }
   let userSubject = null;
 

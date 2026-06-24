@@ -155,3 +155,8 @@ export const remove = async (userId, sessionId) => {
   const session = await assertOwned(userId, sessionId);
   await plannerRepository.remove(session);
 };
+
+export const clearAll = async (userId) => {
+  const deleted = await plannerRepository.deleteAllByUserId(userId);
+  return { deleted };
+};
