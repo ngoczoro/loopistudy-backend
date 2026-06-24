@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { requireAdmin, validateQuery } from "../shared/admin.middleware.js";
-import { getRecentContent, getStats } from "./dashboard.controller.js";
+import {
+  getRecentContent,
+  getStats,
+  getWeeklyActivity,
+} from "./dashboard.controller.js";
 import { recentContentQuerySchema } from "./dashboard.validation.js";
 
 const router = Router();
@@ -8,6 +12,7 @@ const router = Router();
 router.use(...requireAdmin);
 
 router.get("/stats", getStats);
+router.get("/weekly-activity", getWeeklyActivity);
 router.get(
   "/recent-content",
   validateQuery(recentContentQuerySchema),
