@@ -592,12 +592,11 @@ const seedUserBundle = async (sequelize, user, profile, userKey) => {
 export const runDemoSeed = async (sequelize, { fresh = true } = {}) => {
   const passwordHash = await hashDemoPassword(DEMO_PASSWORD);
 
-  if (fresh) {
-    await clearAllDemoUsersData(
-      sequelize,
-      DEMO_USERS.map((user) => user.email),
-    );
-  }
+  // Ép buộc dọn sạch dữ liệu cũ của các tài khoản demo để tránh rác UUID
+  await clearAllDemoUsersData(
+    sequelize,
+    DEMO_USERS.map((user) => user.email),
+  );
 
   const createdUsers = [];
 
@@ -605,15 +604,10 @@ export const runDemoSeed = async (sequelize, { fresh = true } = {}) => {
     const user = await ensureDemoUser(sequelize, spec, passwordHash);
     createdUsers.push({ user, profile: spec.profile });
 
-    if (fresh) {
-      await seedUserBundle(sequelize, user, spec.profile, spec.key);
-    } else {
-      const { Subject } = sequelize.models;
-      const existingSubjects = await Subject.count({ where: { userId: user.id } });
-      if (existingSubjects === 0) {
-        await seedUserBundle(sequelize, user, spec.profile, spec.key);
-      }
-    }
+    // BỎ CÁC ĐIỀU KIỆN CHECK: Luôn luôn ép buộc nạp mới gói data bundle (Subjects, Tasks...) 
+    // theo đúng UUID của User vừa được sinh ra trên thiết bị hiện tại.
+    console.log(`--> Đang đồng bộ data bundle hoàn chỉnh cho user: ${spec.email}`);
+    await seedUserBundle(sequelize, user, spec.profile, spec.key);
   }
 
   return {

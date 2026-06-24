@@ -23,7 +23,7 @@ const assertOwned = async (userId, sessionId) => {
 };
 
 const validateSubject = async (userId, subjectId) => {
-  if (subjectId) {
+  if (subjectId && subjectId !== "" && subjectId !== "null" && subjectId !== "undefined") {
     await assertSubjectOwned(userId, subjectId);
   }
 };
@@ -104,6 +104,7 @@ export const getById = async (userId, sessionId) => {
 };
 
 export const create = async (userId, input) => {
+  console.log("=== BACKEND NHẬN ĐƯỢC INPUT ===", JSON.stringify(input));
   await validateSubject(userId, input.subjectId);
   await assertNotBlocked(
     userId,
