@@ -11,6 +11,7 @@ router.get("/", notificationController.getAll);
 router.patch("/:id/read", notificationController.markAsRead);
 router.get("/:id", notificationController.getById);
 router.put("/:id", notificationController.update);
+router.delete("/", notificationController.removeAll);
 router.delete("/:id", notificationController.remove);
 
 export default router;

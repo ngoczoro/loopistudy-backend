@@ -106,3 +106,13 @@ export const remove = asyncHandler(async (req, res) => {
   }
   res.json(buildSuccessResponse("Notification deleted successfully"));
 });
+
+export const removeAll = asyncHandler(async (req, res) => {
+  const userId = req.user.userId;
+  const deletedCount = await notificationService.removeAll(userId);
+  res.json(
+    buildSuccessResponse("All notifications deleted successfully", {
+      deletedCount,
+    }),
+  );
+});

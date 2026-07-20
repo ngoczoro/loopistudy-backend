@@ -79,3 +79,8 @@ export const remove = async (userId, id) => {
   await item.destroy();
   return true;
 };
+
+export const removeAll = async (userId) => {
+  const { Notification } = sequelize.models;
+  return Notification.destroy({ where: { userId } });
+};
