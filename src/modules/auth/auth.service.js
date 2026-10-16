@@ -1,7 +1,11 @@
 import crypto from "crypto";
 import ApiError from "../../utils/ApiError.js";
 import { sendOtpEmail } from "../../utils/email.js";
-import { hashPassword, verifyPassword } from "../../utils/password.js";
+import {
+  hashPassword,
+  verifyAgainstDummyHash,
+  verifyPassword,
+} from "../../utils/password.js";
 import {
   generateOTP,
   getOTPExpirationTime,
@@ -219,16 +223,14 @@ export const verifyOtp = async ({ email, otp }) => {
 
 export const login = async ({ email, password }) => {
   const user = await authRepository.findUserByEmail(email);
-  if (!user) {
+  const isPasswordValid = user
+    ? await verifyPassword(password, user.passwordHash)
+    : await verifyAgainstDummyHash(password);
+  if (!isPasswordValid) {
     throw ApiError.unauthorized("Invalid email or password");
   }
 
   assertUserCanLogin(user);
-
-  const isPasswordValid = await verifyPassword(password, user.passwordHash);
-  if (!isPasswordValid) {
-    throw ApiError.unauthorized("Invalid email or password");
-  }
 
   const { accessToken, refreshToken } = await issueAuthTokens(user);
   return serializeLogin(user, accessToken, refreshToken);

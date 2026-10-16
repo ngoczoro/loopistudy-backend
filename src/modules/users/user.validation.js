@@ -1,5 +1,6 @@
 import Joi from "joi";
 import { DAY_LABELS } from "./user.constants.js";
+import { newPasswordField } from "../../shared/utils/passwordPolicy.js";
 
 const notificationSchema = Joi.object({
   taskReminders: Joi.boolean().optional(),
@@ -49,7 +50,7 @@ export const replaceBlockedSlotsSchema = Joi.object({
 
 export const changePasswordSchema = Joi.object({
   currentPassword: Joi.string().required(),
-  newPassword: Joi.string().min(8).required(),
+  newPassword: newPasswordField().required(),
   confirmPassword: Joi.string()
     .valid(Joi.ref("newPassword"))
     .required()

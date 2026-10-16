@@ -27,7 +27,7 @@ const printSummary = (result) => {
   for (const user of result.users) {
     console.log(`  • ${user.email} — ${user.fullName} [${user.profile}] (${user.status})`);
   }
-  console.log("\nAdmin (from server boot / seedAdmin): admin@loopi.com / admin123");
+  console.log("\nAdmin (from server boot / seedAdmin): ADMIN_EMAIL / ADMIN_PASSWORD in .env");
   console.log("\nSuggested logins for demo:");
   console.log("  Student UI → alex.demo@loopi.com");
   console.log("  Admin UI   → admin@loopi.com");

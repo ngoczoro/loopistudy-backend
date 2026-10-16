@@ -1,8 +1,9 @@
 import Joi from "joi";
+import { newPasswordField } from "../../shared/utils/passwordPolicy.js";
 
 export const registerSchema = Joi.object({
   email: Joi.string().email().required(),
-  password: Joi.string().min(8).required(),
+  password: newPasswordField().required(),
   confirmPassword: Joi.string().valid(Joi.ref("password")).required().messages({
     "any.only": "Passwords do not match",
   }),
@@ -34,7 +35,7 @@ export const forgotPasswordSchema = Joi.object({
 export const resetPasswordWithOtpSchema = Joi.object({
   email: Joi.string().email().required(),
   otp: Joi.string().length(6).required(),
-  newPassword: Joi.string().min(8).required(),
+  newPassword: newPasswordField().required(),
   confirmPassword: Joi.string()
     .valid(Joi.ref("newPassword"))
     .required()
