@@ -30,6 +30,21 @@ export const joinGroupSchema = Joi.object({
   inviteCode: Joi.string().trim().min(1).max(20).required(),
 });
 
+export const listMessagesQuerySchema = Joi.object({
+  before: uuid.optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+});
+
+/** Multipart text field; "content or files" is checked in the service. */
+export const sendMessageSchema = Joi.object({
+  content: Joi.string().allow("").max(2000).optional(),
+});
+
+export const listSharedQuerySchema = Joi.object({
+  type: Joi.string().valid("media", "file", "link").required(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+});
+
 export const updateMySettingsSchema = Joi.object({
   pinned: Joi.boolean().optional(),
   muted: Joi.boolean().optional(),

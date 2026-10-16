@@ -23,6 +23,8 @@ import { defineAiResourceRecommendationHistoryModel } from "./AiResourceRecommen
 import { defineSavedLearningResourceModel } from "./SavedLearningResource.js";
 import { defineStudyGroupModel } from "./StudyGroup.js";
 import { defineGroupMemberModel } from "./GroupMember.js";
+import { defineGroupMessageModel } from "./GroupMessage.js";
+import { defineGroupMessageAttachmentModel } from "./GroupMessageAttachment.js";
 
 export const initializeModels = () => {
   const User = defineUserModel(sequelize);
@@ -50,6 +52,8 @@ export const initializeModels = () => {
   const SavedLearningResource = defineSavedLearningResourceModel(sequelize);
   const StudyGroup = defineStudyGroupModel(sequelize);
   const GroupMember = defineGroupMemberModel(sequelize);
+  const GroupMessage = defineGroupMessageModel(sequelize);
+  const GroupMessageAttachment = defineGroupMessageAttachmentModel(sequelize);
 
   // --- User ownership graph ---
   User.hasMany(RefreshToken, { foreignKey: "user_id", as: "refreshTokens" });
@@ -257,6 +261,19 @@ export const initializeModels = () => {
   User.hasMany(GroupMember, { foreignKey: "userId", as: "groupMemberships" });
   GroupMember.belongsTo(User, { foreignKey: "userId", as: "user" });
 
+  StudyGroup.hasMany(GroupMessage, { foreignKey: "groupId", as: "messages" });
+  GroupMessage.belongsTo(StudyGroup, { foreignKey: "groupId", as: "group" });
+  GroupMessage.belongsTo(User, { foreignKey: "senderId", as: "sender" });
+
+  GroupMessage.hasMany(GroupMessageAttachment, {
+    foreignKey: "messageId",
+    as: "attachments",
+  });
+  GroupMessageAttachment.belongsTo(GroupMessage, {
+    foreignKey: "messageId",
+    as: "message",
+  });
+
   // Backward-compatible alias for auth layer
   sequelize.models.EmailOtp = OtpCode;
 
@@ -286,6 +303,8 @@ export const initializeModels = () => {
     SavedLearningResource,
     StudyGroup,
     GroupMember,
+    GroupMessage,
+    GroupMessageAttachment,
   };
 };
 

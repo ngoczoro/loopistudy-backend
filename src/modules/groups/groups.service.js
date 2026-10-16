@@ -6,6 +6,11 @@ import {
   uploadImageToCloudinary,
 } from "../../services/cloudinaryUpload.service.js";
 import * as groupsRepository from "./groups.repository.js";
+import * as messagesService from "./messages.service.js";
+import {
+  getMembershipOrThrow,
+  getOwnerMembershipOrThrow,
+} from "./groups.access.js";
 import { serializeGroup, serializeMember } from "./groups.serializer.js";
 import {
   GROUP_AVATAR_FOLDER,
@@ -61,35 +66,19 @@ const removeCloudinaryImage = async (publicId) => {
   }
 };
 
-/**
- * Membership of `userId` in an active group.
- * 404 when the group does not exist, 403 when the caller is not a member.
- * Shared with other group-scoped modules (chat, resources, progress).
- */
-export const getMembershipOrThrow = async (groupId, userId) => {
-  const membership = await groupsRepository.findMembership(groupId, userId);
-  if (membership) return membership;
-
-  const group = await groupsRepository.findGroupById(groupId);
-  if (!group) throw ApiError.notFound("Không tìm thấy nhóm.");
-  throw ApiError.forbidden("Bạn không phải thành viên nhóm này.");
-};
-
-export const getOwnerMembershipOrThrow = async (groupId, userId) => {
-  const membership = await getMembershipOrThrow(groupId, userId);
-  if (membership.role !== GROUP_ROLE.OWNER) {
-    throw ApiError.forbidden("Chỉ trưởng nhóm mới thực hiện được thao tác này.");
-  }
-  return membership;
-};
+export { getMembershipOrThrow, getOwnerMembershipOrThrow };
 
 const buildGroupViews = async (memberships) => {
   const groupIds = memberships.map((membership) => membership.groupId);
-  const memberCounts = await groupsRepository.countMembersByGroupIds(groupIds);
+  const [memberCounts, chatSummaries] = await Promise.all([
+    groupsRepository.countMembersByGroupIds(groupIds),
+    messagesService.getChatSummaries(memberships),
+  ]);
 
   return memberships.map((membership) =>
     serializeGroup(membership, {
       memberCount: memberCounts.get(membership.groupId) ?? 0,
+      ...chatSummaries.get(membership.groupId),
     }),
   );
 };

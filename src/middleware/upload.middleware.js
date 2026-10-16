@@ -144,4 +144,39 @@ export const uploadSingleImage = (fieldName) => (req, res, next) => {
   });
 };
 
+/** multer decodes multipart filenames as latin1; recover UTF-8 names (e.g. Vietnamese). */
+const decodeOriginalName = (file) => {
+  const decoded = Buffer.from(file.originalname, "latin1").toString("utf8");
+  if (!decoded.includes("\uFFFD")) file.originalname = decoded;
+};
+
+/** Up to `maxCount` files (≤ 5 MB each, same types as content uploads) under `fieldName`. */
+export const uploadFiles = (fieldName, maxCount) => (req, res, next) => {
+  multer({
+    storage,
+    limits: { fileSize: MAX_FILE_SIZE, files: maxCount },
+    fileFilter,
+  }).array(fieldName, maxCount)(req, res, (error) => {
+    if (!error) {
+      (req.files ?? []).forEach(decodeOriginalName);
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError) {
+      const messages = {
+        LIMIT_FILE_SIZE: FILE_SIZE_LIMIT_MESSAGE,
+        LIMIT_FILE_COUNT: `Tối đa ${maxCount} file mỗi lần gửi.`,
+        LIMIT_UNEXPECTED_FILE: `Tối đa ${maxCount} file mỗi lần gửi.`,
+      };
+      return res.status(400).json({
+        success: false,
+        message: messages[error.code] ?? error.message,
+      });
+    }
+
+    next(error);
+  });
+};
+
 export default upload;

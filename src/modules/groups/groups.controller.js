@@ -1,6 +1,7 @@
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { buildSuccessResponse } from "../../utils/response.js";
 import * as groupsService from "./groups.service.js";
+import * as messagesService from "./messages.service.js";
 
 export const list = asyncHandler(async (req, res) => {
   const data = await groupsService.listMyGroups(req.user.userId);
@@ -71,4 +72,42 @@ export const removeMember = asyncHandler(async (req, res) => {
     req.params.userId,
   );
   res.json(buildSuccessResponse("Member removed successfully"));
+});
+
+export const listMessages = asyncHandler(async (req, res) => {
+  const data = await messagesService.listMessages(
+    req.user.userId,
+    req.params.groupId,
+    req.query,
+  );
+  res.json(buildSuccessResponse("Messages fetched successfully", data));
+});
+
+export const sendMessage = asyncHandler(async (req, res) => {
+  const data = await messagesService.sendMessage(
+    req.user.userId,
+    req.params.groupId,
+    req.body,
+    req.files ?? [],
+  );
+  res.status(201).json(buildSuccessResponse("Message sent successfully", data));
+});
+
+export const markRead = asyncHandler(async (req, res) => {
+  const data = await messagesService.markRead(req.user.userId, req.params.groupId);
+  res.json(buildSuccessResponse("Messages marked as read", data));
+});
+
+export const clearHistory = asyncHandler(async (req, res) => {
+  const data = await messagesService.clearHistory(req.user.userId, req.params.groupId);
+  res.json(buildSuccessResponse("Chat history cleared", data));
+});
+
+export const listShared = asyncHandler(async (req, res) => {
+  const data = await messagesService.listShared(
+    req.user.userId,
+    req.params.groupId,
+    req.query,
+  );
+  res.json(buildSuccessResponse("Shared items fetched successfully", data));
 });

@@ -1,26 +1,41 @@
 import { Router } from "express";
 import { verifyTokenMiddleware } from "../../middlewares/authMiddleware.js";
-import { uploadSingleImage } from "../../middleware/upload.middleware.js";
-import { validateBody } from "../../validations/schemas.js";
 import {
+  uploadFiles,
+  uploadSingleImage,
+} from "../../middleware/upload.middleware.js";
+import { validateBody, validateQuery } from "../../validations/schemas.js";
+import {
+  clearHistory,
   create,
   getById,
   join,
   leave,
   list,
   listMembers,
+  listMessages,
+  listShared,
+  markRead,
   regenerateInviteCode,
   remove,
   removeMember,
+  sendMessage,
   update,
   updateMySettings,
 } from "./groups.controller.js";
-import { GROUP_AVATAR_FIELD } from "./groups.constants.js";
+import {
+  CHAT_FILES_FIELD,
+  CHAT_MAX_FILES,
+  GROUP_AVATAR_FIELD,
+} from "./groups.constants.js";
 import {
   createGroupSchema,
   groupIdParamSchema,
   joinGroupSchema,
+  listMessagesQuerySchema,
+  listSharedQuerySchema,
   memberParamSchema,
+  sendMessageSchema,
   updateGroupSchema,
   updateMySettingsSchema,
 } from "./groups.validation.js";
@@ -81,6 +96,32 @@ router.delete(
   "/:groupId/members/:userId",
   validateParams(memberParamSchema),
   removeMember,
+);
+
+router.get(
+  "/:groupId/messages",
+  validateParams(groupIdParamSchema),
+  validateQuery(listMessagesQuerySchema),
+  listMessages,
+);
+router.post(
+  "/:groupId/messages",
+  validateParams(groupIdParamSchema),
+  uploadFiles(CHAT_FILES_FIELD, CHAT_MAX_FILES),
+  validateBody(sendMessageSchema),
+  sendMessage,
+);
+router.post(
+  "/:groupId/messages/clear",
+  validateParams(groupIdParamSchema),
+  clearHistory,
+);
+router.post("/:groupId/read", validateParams(groupIdParamSchema), markRead);
+router.get(
+  "/:groupId/shared",
+  validateParams(groupIdParamSchema),
+  validateQuery(listSharedQuerySchema),
+  listShared,
 );
 
 export default router;

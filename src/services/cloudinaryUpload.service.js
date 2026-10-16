@@ -46,7 +46,10 @@ export const uploadImageToCloudinary = async (file, { folder = CLOUDINARY_FOLDER
 };
 
 // 2. Upload tài liệu PDF/Word/Excel (Bảo mật bằng Base64 để tránh lỗi mất cấu trúc file thô)
-export const uploadDocumentToCloudinary = async (file) => {
+export const uploadDocumentToCloudinary = async (
+  file,
+  { folder = CLOUDINARY_FOLDER, publicId } = {},
+) => {
   let fileBuffer;
   
   if (file?.buffer) {
@@ -61,8 +64,9 @@ export const uploadDocumentToCloudinary = async (file) => {
   const base64File = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
 
   return uploadToCloudinary(base64File, {
-    folder: CLOUDINARY_FOLDER,
-    resource_type: "raw", 
+    folder,
+    resource_type: "raw",
+    ...(publicId ? { public_id: publicId } : {}),
   });
 };
 
