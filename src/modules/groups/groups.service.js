@@ -5,6 +5,11 @@ import {
   deleteImageFromCloudinary,
   uploadImageToCloudinary,
 } from "../../services/cloudinaryUpload.service.js";
+import {
+  closeRoom,
+  groupRoom,
+  removeUserFromRoom,
+} from "../../shared/realtime/socket.js";
 import * as groupsRepository from "./groups.repository.js";
 import * as messagesService from "./messages.service.js";
 import {
@@ -158,6 +163,7 @@ export const updateGroup = async (userId, groupId, payload, avatarFile) => {
 export const deleteGroup = async (userId, groupId) => {
   const membership = await getOwnerMembershipOrThrow(groupId, userId);
   await groupsRepository.softDeleteGroup(membership.group);
+  closeRoom(groupRoom(groupId));
 };
 
 export const joinGroup = async (userId, rawInviteCode) => {
@@ -180,6 +186,7 @@ export const leaveGroup = async (userId, groupId) => {
     throw ApiError.conflict("Trưởng nhóm không thể rời nhóm. Hãy xóa nhóm nếu không dùng nữa.");
   }
   await groupsRepository.removeMember(groupId, userId);
+  removeUserFromRoom(userId, groupRoom(groupId));
 };
 
 export const regenerateInviteCode = async (userId, groupId) => {
@@ -213,4 +220,5 @@ export const removeMember = async (userId, groupId, targetUserId) => {
 
   const removed = await groupsRepository.removeMember(groupId, targetUserId);
   if (!removed) throw ApiError.notFound("Người này không phải thành viên nhóm.");
+  removeUserFromRoom(targetUserId, groupRoom(groupId));
 };

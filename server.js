@@ -1,6 +1,9 @@
 import "./src/config/loadEnv.js";
 
+import http from "http";
 import app from "./src/app.js";
+import { initRealtime } from "./src/shared/realtime/socket.js";
+import { registerChatSocketHandlers } from "./src/modules/groups/index.js";
 import sequelize from "./src/config/database.js";
 import { initializeModels } from "./src/models/index.js";
 
@@ -29,8 +32,12 @@ const startServer = async () => {
     const { seedAdmin } = await import("./src/utils/seedAdmin.js");
     await seedAdmin();
 
-    app.listen(PORT, () => {
+    const httpServer = http.createServer(app);
+    initRealtime(httpServer, [registerChatSocketHandlers]);
+
+    httpServer.listen(PORT, () => {
       console.log(`✓ Server running on http://localhost:${PORT}`);
+      console.log("✓ Socket.IO ready on the same port");
       console.log(`✓ Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/api/v1`);
     });

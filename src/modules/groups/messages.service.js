@@ -8,6 +8,7 @@ import {
   uploadImageToCloudinary,
 } from "../../services/cloudinaryUpload.service.js";
 import { getExtension, isImageFile } from "../../shared/utils/contentFileTypes.js";
+import { emitToRoom, groupRoom } from "../../shared/realtime/socket.js";
 import * as groupsRepository from "./groups.repository.js";
 import * as messagesRepository from "./messages.repository.js";
 import { getMembershipOrThrow } from "./groups.access.js";
@@ -150,7 +151,6 @@ export const listMessages = async (userId, groupId, query = {}) => {
   };
 };
 
-/** Returns the serialized message; realtime fan-out is the caller's concern. */
 export const sendMessage = async (userId, groupId, payload = {}, files = []) => {
   try {
     const membership = await getMembershipOrThrow(groupId, userId);
@@ -183,7 +183,9 @@ export const sendMessage = async (userId, groupId, payload = {}, files = []) => 
 
     await groupsRepository.updateMembership(membership, { lastReadAt: message.createdAt });
 
-    return serializeMessage(await messagesRepository.findMessageById(message.id));
+    const view = serializeMessage(await messagesRepository.findMessageById(message.id));
+    emitToRoom(groupRoom(groupId), "chat:message", view);
+    return view;
   } finally {
     cleanupTempFiles(files);
   }
