@@ -70,3 +70,5 @@ export const AI_REQUEST_TYPES = [
 ];
 
 export const AI_REQUEST_STATUSES = ["pending", "completed", "failed"];
+
+export const GROUP_MEMBER_ROLES = ["owner", "member"];

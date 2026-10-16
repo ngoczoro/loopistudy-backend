@@ -21,6 +21,8 @@ import { defineAIRequestModel } from "./AIRequest.js";
 import { defineDocumentSummaryModel } from "./DocumentSummary.js";
 import { defineAiResourceRecommendationHistoryModel } from "./AiResourceRecommendationHistory.js";
 import { defineSavedLearningResourceModel } from "./SavedLearningResource.js";
+import { defineStudyGroupModel } from "./StudyGroup.js";
+import { defineGroupMemberModel } from "./GroupMember.js";
 
 export const initializeModels = () => {
   const User = defineUserModel(sequelize);
@@ -46,6 +48,8 @@ export const initializeModels = () => {
   const AiResourceRecommendationHistory =
     defineAiResourceRecommendationHistoryModel(sequelize);
   const SavedLearningResource = defineSavedLearningResourceModel(sequelize);
+  const StudyGroup = defineStudyGroupModel(sequelize);
+  const GroupMember = defineGroupMemberModel(sequelize);
 
   // --- User ownership graph ---
   User.hasMany(RefreshToken, { foreignKey: "user_id", as: "refreshTokens" });
@@ -243,6 +247,16 @@ export const initializeModels = () => {
     as: "subject",
   });
 
+  // --- Study groups ---
+  User.hasMany(StudyGroup, { foreignKey: "ownerId", as: "ownedGroups" });
+  StudyGroup.belongsTo(User, { foreignKey: "ownerId", as: "owner" });
+
+  StudyGroup.hasMany(GroupMember, { foreignKey: "groupId", as: "members" });
+  GroupMember.belongsTo(StudyGroup, { foreignKey: "groupId", as: "group" });
+
+  User.hasMany(GroupMember, { foreignKey: "userId", as: "groupMemberships" });
+  GroupMember.belongsTo(User, { foreignKey: "userId", as: "user" });
+
   // Backward-compatible alias for auth layer
   sequelize.models.EmailOtp = OtpCode;
 
@@ -270,6 +284,8 @@ export const initializeModels = () => {
     DocumentSummary,
     AiResourceRecommendationHistory,
     SavedLearningResource,
+    StudyGroup,
+    GroupMember,
   };
 };
 

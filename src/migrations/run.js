@@ -21,6 +21,7 @@ import { up as quizAiGenerationFields } from "./015_quiz_ai_generation_fields.js
 import { up as quizAttemptsEnhancements } from "./016_quiz_attempts_enhancements.js";
 import { up as aiLearningResources } from "./017_ai_learning_resources.js";
 import { up as userPreferencesMaxStudyHours } from "./018_user_preferences_max_study_hours.js";
+import { up as studyGroups } from "./019_study_groups.js";
 
 const schema = () => process.env.DB_SCHEMA || "learning_app";
 
@@ -45,6 +46,7 @@ const migrations = [
   { name: "016_quiz_attempts_enhancements", up: quizAttemptsEnhancements },
   { name: "017_ai_learning_resources", up: aiLearningResources },
   { name: "018_user_preferences_max_study_hours", up: userPreferencesMaxStudyHours },
+  { name: "019_study_groups", up: studyGroups },
 ];
 
 const ensureMigrationsTable = async () => {

@@ -36,11 +36,11 @@ const uploadToCloudinary = async (fileSource, options) => {
 };
 
 // 1. Upload hình ảnh (giữ nguyên logic dùng file.path gốc của bạn)
-export const uploadImageToCloudinary = async (file) => {
+export const uploadImageToCloudinary = async (file, { folder = CLOUDINARY_FOLDER } = {}) => {
   if (!file?.path) throw ApiError.badRequest("Uploaded file path is missing");
   
   return uploadToCloudinary(file.path, {
-    folder: CLOUDINARY_FOLDER,
+    folder,
     resource_type: "image",
   });
 };

@@ -107,4 +107,41 @@ export const uploadSingleFile = (req, res, next) => {
   });
 };
 
+const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+const imageUpload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+    cb(ApiError.badRequest("Chỉ nhận ảnh PNG, JPG, WEBP hoặc GIF."));
+  },
+});
+
+/** Optional single image (≤ 5 MB) under `fieldName`; non-multipart requests pass through. */
+export const uploadSingleImage = (fieldName) => (req, res, next) => {
+  imageUpload.single(fieldName)(req, res, (error) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        success: false,
+        message: FILE_SIZE_LIMIT_MESSAGE,
+      });
+    }
+
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    next(error);
+  });
+};
+
 export default upload;
