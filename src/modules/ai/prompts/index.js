@@ -1,6 +1,10 @@
 export { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "./summary.prompt.js";
 export { buildQuizPrompt, QUIZ_PROMPT_VERSION } from "./quiz.prompt.js";
 export {
+  buildDocumentFlashcardPrompt,
+  FLASHCARD_PROMPT_VERSION,
+} from "./flashcard.prompt.js";
+export {
   buildExplanationPrompt,
   EXPLANATION_PROMPT_VERSION,
 } from "./explanation.prompt.js";

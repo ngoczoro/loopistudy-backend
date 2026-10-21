@@ -10,6 +10,7 @@ import {
   generatePracticeQuiz,
   generateSubjectQuiz,
 } from "../controllers/quiz-generator.controller.js";
+import { generateDocumentFlashcards } from "../controllers/flashcard-generator.controller.js";
 import {
   getResourceRecommendationHistory,
   getResourceRecommendationHistoryById,
@@ -27,6 +28,7 @@ import {
   documentSearchBodySchema,
   documentSearchExplainBodySchema,
   generatePracticeQuizBodySchema,
+  generateFlashcardsBodySchema,
   generateQuizBodySchema,
   generateSubjectQuizBodySchema,
   generateSummaryBodySchema,
@@ -114,6 +116,13 @@ router.post(
   validateParams(documentIdParamSchema),
   validateBody(generateQuizBodySchema),
   generateDocumentQuiz,
+);
+
+router.post(
+  "/documents/:documentId/generate-flashcards",
+  validateParams(documentIdParamSchema),
+  validateBody(generateFlashcardsBodySchema),
+  generateDocumentFlashcards,
 );
 
 router.post(

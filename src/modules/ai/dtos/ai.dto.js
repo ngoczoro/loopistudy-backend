@@ -18,3 +18,6 @@ export const AI_DIFFICULTY_VALUES = Object.freeze([
 
 /** Allowed AI quiz question counts. */
 export const AI_QUIZ_QUESTION_COUNTS = Object.freeze([5, 10, 15, 20]);
+
+/** Allowed flashcard counts when generating from a note. */
+export const AI_FLASHCARD_COUNTS = Object.freeze([5, 10, 15, 20]);

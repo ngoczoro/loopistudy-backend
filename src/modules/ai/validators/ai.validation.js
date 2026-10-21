@@ -1,6 +1,7 @@
 import Joi from "joi";
 import {
   AI_DIFFICULTY_VALUES,
+  AI_FLASHCARD_COUNTS,
   AI_QUIZ_QUESTION_COUNTS,
 } from "../dtos/ai.dto.js";
 
@@ -44,6 +45,13 @@ export const documentIdParamSchema = Joi.object({
 
 export const generateSummaryBodySchema = Joi.object({
   forceRegenerate: Joi.boolean().default(false),
+});
+
+export const generateFlashcardsBodySchema = Joi.object({
+  numberOfCards: Joi.number()
+    .integer()
+    .valid(...AI_FLASHCARD_COUNTS)
+    .default(5),
 });
 
 export const generateQuizBodySchema = Joi.object({
