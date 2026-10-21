@@ -1,4 +1,3 @@
-import { CONTENT_TYPE } from "../../../config/constants.js";
 import ApiError from "../../../utils/ApiError.js";
 import { getById as getSubjectById } from "../../subjects/index.js";
 import { getOpenAIConfig } from "../ai.constants.js";
@@ -91,10 +90,6 @@ export const generateFlashcardsFromNote = async (
   { numberOfCards = 5 } = {},
 ) => {
   const content = await resolveAccessibleContent(userId, role, documentId);
-
-  if (content.type !== CONTENT_TYPE.NOTE) {
-    throw ApiError.badRequest("Flashcards can only be generated from a note.");
-  }
 
   const documentText = await extractDocumentText(content);
   const summaryRecord = await summaryRepository.findByDocumentId(documentId);

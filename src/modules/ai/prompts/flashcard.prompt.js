@@ -14,7 +14,7 @@ const formatSummaryContext = (summaryContext) => {
   }
 
   const parts = [
-    "TÓM TẮT AI CỦA GHI CHÚ (chỉ dùng khi khớp với nội dung gốc):",
+    "TÓM TẮT AI CỦA TÀI LIỆU (chỉ dùng khi khớp với nội dung gốc):",
     summaryContext.summary,
   ];
 
@@ -33,20 +33,20 @@ export const buildDocumentFlashcardPrompt = ({
   numberOfCards = 5,
   avoidFronts = [],
 } = {}) => {
-  const instructions = `You create study flashcards from one student note.
+  const instructions = `You create study flashcards from one student document.
 
-Use only the note and its AI summary. Never use outside knowledge.
-If the note does not contain enough facts, return fewer cards instead of inventing them.
-Write every card in the same language as the note.
+Use only the document and its AI summary. Never use outside knowledge.
+If the document does not contain enough facts, return fewer cards instead of inventing them.
+Write every card in the same language as the document.
 
 Each card has:
 - front: a short prompt, question, or term (one idea)
 - back: the answer or definition a student should recall
 
 Rules:
-- Create up to ${numberOfCards} cards. Prefer exactly ${numberOfCards} when the note supports that many distinct facts.
+- Create up to ${numberOfCards} cards. Prefer exactly ${numberOfCards} when the document supports that many distinct facts.
 - Do not repeat a fact.
-- Do not copy the whole note onto one card.
+- Do not copy the whole document onto one card.
 - Skip greetings, headings with no fact, and duplicate lines.
 
 Avoid cards whose front matches or closely paraphrases:
@@ -64,7 +64,7 @@ JSON shape:
 }`;
 
   const contextLines = [
-    documentTitle ? `Tiêu đề ghi chú: ${documentTitle}` : null,
+    documentTitle ? `Tiêu đề tài liệu: ${documentTitle}` : null,
     subjectName ? `Môn học: ${subjectName}` : null,
     `Số thẻ mong muốn: ${numberOfCards}`,
   ].filter(Boolean);
@@ -72,7 +72,7 @@ JSON shape:
   const inputParts = [
     contextLines.join("\n"),
     formatSummaryContext(summaryContext),
-    documentText ? `Nội dung ghi chú:\n${documentText}` : null,
+    documentText ? `Nội dung tài liệu:\n${documentText}` : null,
   ].filter(Boolean);
 
   return {
