@@ -8,6 +8,19 @@ import { validateBody, validateQuery } from "../../validations/schemas.js";
 import {
   clearHistory,
   create,
+  createGoal,
+  createResource,
+  createTask,
+  deleteGoal,
+  deleteResource,
+  deleteTask,
+  getProgress,
+  listGoals,
+  listResources,
+  listTasks,
+  remindTask,
+  updateGoal,
+  updateTask,
   getById,
   join,
   leave,
@@ -29,8 +42,17 @@ import {
   GROUP_AVATAR_FIELD,
 } from "./groups.constants.js";
 import {
+  createGoalSchema,
   createGroupSchema,
+  createResourceSchema,
+  createTaskSchema,
+  goalParamSchema,
   groupIdParamSchema,
+  listTasksQuerySchema,
+  taskParamSchema,
+  updateGoalSchema,
+  updateTaskSchema,
+  resourceParamSchema,
   joinGroupSchema,
   listMessagesQuerySchema,
   listSharedQuerySchema,
@@ -97,6 +119,57 @@ router.delete(
   validateParams(memberParamSchema),
   removeMember,
 );
+
+router.get("/:groupId/resources", validateParams(groupIdParamSchema), listResources);
+router.post(
+  "/:groupId/resources",
+  validateParams(groupIdParamSchema),
+  validateBody(createResourceSchema),
+  createResource,
+);
+router.delete(
+  "/:groupId/resources/:resourceId",
+  validateParams(resourceParamSchema),
+  deleteResource,
+);
+
+router.get("/:groupId/goals", validateParams(groupIdParamSchema), listGoals);
+router.post(
+  "/:groupId/goals",
+  validateParams(groupIdParamSchema),
+  validateBody(createGoalSchema),
+  createGoal,
+);
+router.patch(
+  "/:groupId/goals/:goalId",
+  validateParams(goalParamSchema),
+  validateBody(updateGoalSchema),
+  updateGoal,
+);
+router.delete("/:groupId/goals/:goalId", validateParams(goalParamSchema), deleteGoal);
+
+router.get(
+  "/:groupId/tasks",
+  validateParams(groupIdParamSchema),
+  validateQuery(listTasksQuerySchema),
+  listTasks,
+);
+router.post(
+  "/:groupId/tasks",
+  validateParams(groupIdParamSchema),
+  validateBody(createTaskSchema),
+  createTask,
+);
+router.patch(
+  "/:groupId/tasks/:taskId",
+  validateParams(taskParamSchema),
+  validateBody(updateTaskSchema),
+  updateTask,
+);
+router.delete("/:groupId/tasks/:taskId", validateParams(taskParamSchema), deleteTask);
+router.post("/:groupId/tasks/:taskId/remind", validateParams(taskParamSchema), remindTask);
+
+router.get("/:groupId/progress", validateParams(groupIdParamSchema), getProgress);
 
 router.get(
   "/:groupId/messages",
