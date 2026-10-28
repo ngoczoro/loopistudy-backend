@@ -34,9 +34,9 @@ export const pickUpdatePayload = (body = {}) => {
   return payload;
 };
 
-export const create = async (userId, data) => {
+export const create = async (userId, data, options = {}) => {
   const { Notification } = sequelize.models;
-  return await Notification.create({ ...data, userId });
+  return await Notification.create({ ...data, userId }, options);
 };
 
 export const getAll = async (userId, limit, offset, filters = {}) => {

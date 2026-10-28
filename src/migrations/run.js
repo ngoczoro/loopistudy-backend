@@ -23,6 +23,8 @@ import { up as aiLearningResources } from "./017_ai_learning_resources.js";
 import { up as userPreferencesMaxStudyHours } from "./018_user_preferences_max_study_hours.js";
 import { up as studyGroups } from "./019_study_groups.js";
 import { up as groupMessages } from "./020_group_messages.js";
+import { up as groupResources } from "./021_group_resources.js";
+import { up as groupGoalsTasks } from "./022_group_goals_tasks.js";
 
 const schema = () => process.env.DB_SCHEMA || "learning_app";
 
@@ -49,6 +51,8 @@ const migrations = [
   { name: "018_user_preferences_max_study_hours", up: userPreferencesMaxStudyHours },
   { name: "019_study_groups", up: studyGroups },
   { name: "020_group_messages", up: groupMessages },
+  { name: "021_group_resources", up: groupResources },
+  { name: "022_group_goals_tasks", up: groupGoalsTasks },
 ];
 
 const ensureMigrationsTable = async () => {

@@ -25,6 +25,9 @@ import { defineStudyGroupModel } from "./StudyGroup.js";
 import { defineGroupMemberModel } from "./GroupMember.js";
 import { defineGroupMessageModel } from "./GroupMessage.js";
 import { defineGroupMessageAttachmentModel } from "./GroupMessageAttachment.js";
+import { defineGroupResourceModel } from "./GroupResource.js";
+import { defineGroupGoalModel } from "./GroupGoal.js";
+import { defineGroupTaskModel } from "./GroupTask.js";
 
 export const initializeModels = () => {
   const User = defineUserModel(sequelize);
@@ -54,6 +57,9 @@ export const initializeModels = () => {
   const GroupMember = defineGroupMemberModel(sequelize);
   const GroupMessage = defineGroupMessageModel(sequelize);
   const GroupMessageAttachment = defineGroupMessageAttachmentModel(sequelize);
+  const GroupResource = defineGroupResourceModel(sequelize);
+  const GroupGoal = defineGroupGoalModel(sequelize);
+  const GroupTask = defineGroupTaskModel(sequelize);
 
   // --- User ownership graph ---
   User.hasMany(RefreshToken, { foreignKey: "user_id", as: "refreshTokens" });
@@ -274,6 +280,21 @@ export const initializeModels = () => {
     as: "message",
   });
 
+  StudyGroup.hasMany(GroupResource, { foreignKey: "groupId", as: "resources" });
+  GroupResource.belongsTo(StudyGroup, { foreignKey: "groupId", as: "group" });
+  GroupResource.belongsTo(User, { foreignKey: "sharedBy", as: "sharer" });
+
+  StudyGroup.hasMany(GroupGoal, { foreignKey: "groupId", as: "goals" });
+  GroupGoal.belongsTo(StudyGroup, { foreignKey: "groupId", as: "group" });
+  GroupGoal.belongsTo(User, { foreignKey: "createdBy", as: "creator" });
+
+  StudyGroup.hasMany(GroupTask, { foreignKey: "groupId", as: "tasks" });
+  GroupTask.belongsTo(StudyGroup, { foreignKey: "groupId", as: "group" });
+  GroupTask.belongsTo(GroupGoal, { foreignKey: "goalId", as: "goal" });
+  GroupTask.belongsTo(User, { foreignKey: "assigneeId", as: "assignee" });
+  GroupTask.belongsTo(User, { foreignKey: "createdBy", as: "creator" });
+  GroupTask.belongsTo(GroupTask, { foreignKey: "dependsOnTaskId", as: "dependsOn" });
+
   // Backward-compatible alias for auth layer
   sequelize.models.EmailOtp = OtpCode;
 
@@ -305,6 +326,9 @@ export const initializeModels = () => {
     GroupMember,
     GroupMessage,
     GroupMessageAttachment,
+    GroupResource,
+    GroupGoal,
+    GroupTask,
   };
 };
 

@@ -3,7 +3,10 @@ import "./src/config/loadEnv.js";
 import http from "http";
 import app from "./src/app.js";
 import { initRealtime } from "./src/shared/realtime/socket.js";
-import { registerChatSocketHandlers } from "./src/modules/groups/index.js";
+import {
+  registerChatSocketHandlers,
+  startTaskAlertScheduler,
+} from "./src/modules/groups/index.js";
 import sequelize from "./src/config/database.js";
 import { initializeModels } from "./src/models/index.js";
 
@@ -40,6 +43,7 @@ const startServer = async () => {
       console.log("✓ Socket.IO ready on the same port");
       console.log(`✓ Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/api/v1`);
+      startTaskAlertScheduler();
     });
   } catch (error) {
     console.error("✗ Failed to start server:", error.message);
