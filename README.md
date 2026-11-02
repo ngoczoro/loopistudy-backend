@@ -558,7 +558,13 @@ Key Tables:
 
 ---
 
-## 📄 License
+## Ask AI (RAG chatbot)
+
+Setup Ollama, env vars, API overview, and teammate instructions:
+
+See `src/modules/assistant/README.md`
+
+## License
 
 MIT License - See LICENSE file
 

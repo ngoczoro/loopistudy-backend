@@ -172,6 +172,12 @@ export const create = async (userId, payload) => {
   }
 
   const item = await contentRepository.create(data);
+  if (item.type === CONTENT_TYPE.NOTE || item.type === CONTENT_TYPE.FILE) {
+    const { enqueueContent } = await import("../assistant/assistant.indexer.js");
+    await enqueueContent(item.id, userId).catch((error) =>
+      console.warn("⚠ Failed to enqueue assistant index:", error.message),
+    );
+  }
   return serializeContentItem(item);
 };
 
@@ -191,6 +197,13 @@ export const createFileContent = async (userId, body, file, uploadResult) => {
     type: CONTENT_TYPE.FILE,
     ...fileMeta,
   });
+
+  {
+    const { enqueueContent } = await import("../assistant/assistant.indexer.js");
+    await enqueueContent(item.id, userId).catch((error) =>
+      console.warn("⚠ Failed to enqueue assistant index:", error.message),
+    );
+  }
 
   return serializeContentItem(item);
 };
@@ -265,6 +278,23 @@ export const update = async (
   }
 
   const updated = await contentRepository.updateById(id, userId, updates);
+
+  const shouldReindex =
+    updated.type === CONTENT_TYPE.NOTE || updated.type === CONTENT_TYPE.FILE;
+  const contentChanged =
+    updates.content !== undefined ||
+    updates.title !== undefined ||
+    updates.description !== undefined ||
+    updates.fileUrl !== undefined ||
+    updates.fileName !== undefined ||
+    replacementFile;
+  if (shouldReindex && contentChanged) {
+    const { enqueueContent } = await import("../assistant/assistant.indexer.js");
+    await enqueueContent(updated.id, userId, { stale: true }).catch((error) =>
+      console.warn("⚠ Failed to enqueue assistant reindex:", error.message),
+    );
+  }
+
   return serializeContentItem(updated);
 };
 
@@ -293,6 +323,13 @@ export const remove = async (userId, id) => {
   }
 
   await contentRepository.softDeleteById(id, userId);
+
+  const { deleteIndexData } = await import(
+    "../assistant/assistant.index.repository.js"
+  );
+  await deleteIndexData(id).catch((error) =>
+    console.warn("⚠ Failed to delete assistant index data:", error.message),
+  );
 };
 
 export const removeForAdmin = async (id) => {
@@ -303,6 +340,13 @@ export const removeForAdmin = async (id) => {
   }
 
   await item.destroy();
+
+  const { deleteIndexData } = await import(
+    "../assistant/assistant.index.repository.js"
+  );
+  await deleteIndexData(id).catch((error) =>
+    console.warn("⚠ Failed to delete assistant index data:", error.message),
+  );
 };
 
 export const getByIdForAdmin = async (id) => {

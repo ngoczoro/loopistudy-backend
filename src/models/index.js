@@ -28,6 +28,10 @@ import { defineGroupMessageAttachmentModel } from "./GroupMessageAttachment.js";
 import { defineGroupResourceModel } from "./GroupResource.js";
 import { defineGroupGoalModel } from "./GroupGoal.js";
 import { defineGroupTaskModel } from "./GroupTask.js";
+import { defineAssistantConversationModel } from "./AssistantConversation.js";
+import { defineAssistantMessageModel } from "./AssistantMessage.js";
+import { defineDocumentIndexStatusModel } from "./DocumentIndexStatus.js";
+import { defineDocumentChunkModel } from "./DocumentChunk.js";
 
 export const initializeModels = () => {
   const User = defineUserModel(sequelize);
@@ -60,6 +64,10 @@ export const initializeModels = () => {
   const GroupResource = defineGroupResourceModel(sequelize);
   const GroupGoal = defineGroupGoalModel(sequelize);
   const GroupTask = defineGroupTaskModel(sequelize);
+  const AssistantConversation = defineAssistantConversationModel(sequelize);
+  const AssistantMessage = defineAssistantMessageModel(sequelize);
+  const DocumentIndexStatus = defineDocumentIndexStatusModel(sequelize);
+  const DocumentChunk = defineDocumentChunkModel(sequelize);
 
   // --- User ownership graph ---
   User.hasMany(RefreshToken, { foreignKey: "user_id", as: "refreshTokens" });
@@ -295,6 +303,25 @@ export const initializeModels = () => {
   GroupTask.belongsTo(User, { foreignKey: "createdBy", as: "creator" });
   GroupTask.belongsTo(GroupTask, { foreignKey: "dependsOnTaskId", as: "dependsOn" });
 
+  User.hasMany(AssistantConversation, { foreignKey: "userId", as: "assistantConversations" });
+  AssistantConversation.belongsTo(User, { foreignKey: "userId", as: "user" });
+  AssistantConversation.hasMany(AssistantMessage, {
+    foreignKey: "conversationId",
+    as: "messages",
+  });
+  AssistantMessage.belongsTo(AssistantConversation, {
+    foreignKey: "conversationId",
+    as: "conversation",
+  });
+
+  ContentItem.hasOne(DocumentIndexStatus, { foreignKey: "contentId", as: "indexStatus" });
+  DocumentIndexStatus.belongsTo(ContentItem, { foreignKey: "contentId", as: "content" });
+  DocumentIndexStatus.belongsTo(User, { foreignKey: "userId", as: "user" });
+
+  ContentItem.hasMany(DocumentChunk, { foreignKey: "contentId", as: "chunks" });
+  DocumentChunk.belongsTo(ContentItem, { foreignKey: "contentId", as: "content" });
+  DocumentChunk.belongsTo(User, { foreignKey: "userId", as: "user" });
+
   // Backward-compatible alias for auth layer
   sequelize.models.EmailOtp = OtpCode;
 
@@ -329,6 +356,10 @@ export const initializeModels = () => {
     GroupResource,
     GroupGoal,
     GroupTask,
+    AssistantConversation,
+    AssistantMessage,
+    DocumentIndexStatus,
+    DocumentChunk,
   };
 };
 

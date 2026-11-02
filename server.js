@@ -7,6 +7,7 @@ import {
   registerChatSocketHandlers,
   startTaskAlertScheduler,
 } from "./src/modules/groups/index.js";
+import { startAssistantIndexWorker } from "./src/modules/assistant/index.js";
 import sequelize from "./src/config/database.js";
 import { initializeModels } from "./src/models/index.js";
 
@@ -44,6 +45,7 @@ const startServer = async () => {
       console.log(`✓ Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/api/v1`);
       startTaskAlertScheduler();
+      startAssistantIndexWorker();
     });
   } catch (error) {
     console.error("✗ Failed to start server:", error.message);
