@@ -12,6 +12,7 @@ import {
 } from "../../shared/realtime/socket.js";
 import * as groupsRepository from "./groups.repository.js";
 import * as messagesService from "./messages.service.js";
+import * as tasksService from "./tasks.service.js";
 import {
   getMembershipOrThrow,
   getOwnerMembershipOrThrow,
@@ -75,14 +76,16 @@ export { getMembershipOrThrow, getOwnerMembershipOrThrow };
 
 const buildGroupViews = async (memberships) => {
   const groupIds = memberships.map((membership) => membership.groupId);
-  const [memberCounts, chatSummaries] = await Promise.all([
+  const [memberCounts, chatSummaries, progressSummaries] = await Promise.all([
     groupsRepository.countMembersByGroupIds(groupIds),
     messagesService.getChatSummaries(memberships),
+    tasksService.getProgressSummaries(groupIds),
   ]);
 
   return memberships.map((membership) =>
     serializeGroup(membership, {
       memberCount: memberCounts.get(membership.groupId) ?? 0,
+      progress: progressSummaries.get(membership.groupId),
       ...chatSummaries.get(membership.groupId),
     }),
   );
@@ -186,6 +189,7 @@ export const leaveGroup = async (userId, groupId) => {
     throw ApiError.conflict("Trưởng nhóm không thể rời nhóm. Hãy xóa nhóm nếu không dùng nữa.");
   }
   await groupsRepository.removeMember(groupId, userId);
+  await tasksService.unassignMember(groupId, userId);
   removeUserFromRoom(userId, groupRoom(groupId));
 };
 
@@ -220,5 +224,6 @@ export const removeMember = async (userId, groupId, targetUserId) => {
 
   const removed = await groupsRepository.removeMember(groupId, targetUserId);
   if (!removed) throw ApiError.notFound("Người này không phải thành viên nhóm.");
+  await tasksService.unassignMember(groupId, targetUserId);
   removeUserFromRoom(targetUserId, groupRoom(groupId));
 };

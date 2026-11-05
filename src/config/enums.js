@@ -55,6 +55,11 @@ export const NOTIFICATION_TYPES = [
   "streak",
   "session",
   "moderation",
+  "group_task_assigned",
+  "group_task_reminder",
+  "group_task_due_soon",
+  "group_task_overdue",
+  "group_task_blocked",
 ];
 
 export const VIOLATION_TYPES = ["spam", "inappropriate", "irrelevant"];
@@ -72,3 +77,5 @@ export const AI_REQUEST_TYPES = [
 export const AI_REQUEST_STATUSES = ["pending", "completed", "failed"];
 
 export const GROUP_MEMBER_ROLES = ["owner", "member"];
+
+export const GROUP_TASK_STATUSES = ["todo", "doing", "done"];

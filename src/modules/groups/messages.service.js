@@ -29,6 +29,8 @@ import {
   SHARED_MAX_LIMIT,
 } from "./groups.constants.js";
 
+const DELIVERY_BLOCKED_EXTENSIONS = new Set(["pdf", "zip"]);
+
 /** Must match the FE link detection in `src/lib/chatLinks.js`. */
 const URL_PATTERN = /https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/gi;
 
@@ -78,9 +80,11 @@ const uploadAttachment = async (file) => {
   }
 
   const ext = getExtension(file.originalname);
+  // Cloudinary refuses to deliver URLs ending in .pdf/.zip unless the account allows it.
+  const keepExtension = ext && !DELIVERY_BLOCKED_EXTENSIONS.has(ext);
   const uploaded = await uploadDocumentToCloudinary(file, {
     folder: CHAT_ATTACHMENT_FOLDER,
-    publicId: ext ? `${crypto.randomUUID()}.${ext}` : crypto.randomUUID(),
+    publicId: keepExtension ? `${crypto.randomUUID()}.${ext}` : crypto.randomUUID(),
   });
   return { ...base, kind: "file", url: uploaded.secureUrl, publicId: uploaded.publicId };
 };
