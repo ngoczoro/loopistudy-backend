@@ -79,6 +79,10 @@ export async function up(sequelize) {
     )
   `);
   await sequelize.query(`
+    ALTER TABLE "${SCHEMA}"."document_chunks"
+      ADD COLUMN IF NOT EXISTS search_tsv TSVECTOR
+  `);
+  await sequelize.query(`
     CREATE INDEX IF NOT EXISTS document_chunks_user_content_idx
       ON "${SCHEMA}"."document_chunks" (user_id, content_id)
   `);
