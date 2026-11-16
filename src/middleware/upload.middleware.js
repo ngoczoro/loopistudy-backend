@@ -53,6 +53,12 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+/** multer decodes multipart filenames as latin1; recover UTF-8 names (e.g. Vietnamese). */
+const decodeOriginalName = (file) => {
+  const decoded = Buffer.from(file.originalname, "latin1").toString("utf8");
+  if (!decoded.includes("�")) file.originalname = decoded;
+};
+
 const isAllowedFile = (file) => {
   const ext = getExtension(file.originalname);
   return (
@@ -69,7 +75,9 @@ const storage = multer.diskStorage({
   },
 });
 
+// Runs before storage, so the decoded name reaches the disk filename and handlers.
 const fileFilter = (_req, file, cb) => {
+  decodeOriginalName(file);
   if (isAllowedFile(file)) {
     cb(null, true);
     return;
@@ -113,6 +121,7 @@ const imageUpload = multer({
   storage,
   limits: { fileSize: MAX_FILE_SIZE, files: 1 },
   fileFilter: (_req, file, cb) => {
+    decodeOriginalName(file);
     if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
       return;
@@ -144,12 +153,6 @@ export const uploadSingleImage = (fieldName) => (req, res, next) => {
   });
 };
 
-/** multer decodes multipart filenames as latin1; recover UTF-8 names (e.g. Vietnamese). */
-const decodeOriginalName = (file) => {
-  const decoded = Buffer.from(file.originalname, "latin1").toString("utf8");
-  if (!decoded.includes("\uFFFD")) file.originalname = decoded;
-};
-
 /** Up to `maxCount` files (≤ 5 MB each, same types as content uploads) under `fieldName`. */
 export const uploadFiles = (fieldName, maxCount) => (req, res, next) => {
   multer({
@@ -158,7 +161,6 @@ export const uploadFiles = (fieldName, maxCount) => (req, res, next) => {
     fileFilter,
   }).array(fieldName, maxCount)(req, res, (error) => {
     if (!error) {
-      (req.files ?? []).forEach(decodeOriginalName);
       next();
       return;
     }

@@ -81,6 +81,8 @@ export const gradeQuizAttempt = (quizQuestions, submittedAnswers) => {
     return {
       questionIndex,
       question: question.question,
+      // Snapshot so reviewing this attempt still works after the quiz is edited.
+      options: question.options,
       selectedIndex,
       selectedAnswer: indexToLetter(selectedIndex),
       correctIndex,

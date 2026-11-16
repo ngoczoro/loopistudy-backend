@@ -16,9 +16,15 @@ import {
   SCOPE_TYPE,
   TITLE_FROM_QUESTION_MAX,
 } from "./assistant.constants.js";
-import { embedQuery } from "./assistant.embedding.js";
+import { embedQuery, embedTexts } from "./assistant.embedding.js";
 import { generateRagAnswer } from "./assistant.llm.js";
-import { retrieveChunks } from "./assistant.retrieve.js";
+import {
+  cosineSimilarity,
+  rankChunksForTopic,
+  retrieveChunks,
+} from "./assistant.retrieve.js";
+
+const TOPIC_PASSAGE_MARGIN = 0.15;
 
 const requireOwnedConversation = async (userId, conversationId) => {
   const conversation = await assistantRepository.findConversationForUser(
@@ -226,4 +232,45 @@ export const sendMessage = async (userId, conversationId, payload) => {
     assistantMessage: serializeMessage(result.assistantMessage),
     conversation: await conversationView(refreshed),
   };
+};
+
+/**
+ * Indexed passages about `topic` for other modules (e.g. quiz generation).
+ * Scope: one subject when `subjectId` is set, otherwise all of the user's notes and files.
+ * Returns [] when nothing is indexed yet or nothing is relevant enough; callers fall back.
+ */
+export const findTopicPassages = async (userId, { subjectId = null, topic, limit } = {}) => {
+  const text = String(topic ?? "").trim();
+  if (!text) return [];
+
+  let queryEmbedding = null;
+  try {
+    queryEmbedding = await embedQuery(text);
+  } catch (error) {
+    console.warn("⚠ Topic embedding unavailable, keyword-only ranking:", error.message);
+  }
+
+  const scope = subjectId ? { type: "subject", subjectId } : { type: "all" };
+  const passages = await rankChunksForTopic(userId, scope, text, { queryEmbedding, limit });
+  if (!passages.length) return passages;
+
+  // Chunks are ~2000 chars; keep only those close to the best one, not everything above the floor.
+  const best = passages[0].score;
+  return passages.filter((passage) => passage.score >= best - TOPIC_PASSAGE_MARGIN);
+};
+
+/**
+ * Cosine similarity of each text to `topic` with the Ask AI embedding model.
+ * Null when the model is unavailable, so callers keep their own order.
+ */
+export const scoreTextsForTopic = async (topic, texts) => {
+  if (!texts.length) return [];
+  try {
+    const [query] = await embedTexts([topic], { isQuery: true });
+    const vectors = await embedTexts(texts);
+    return vectors.map((vector) => cosineSimilarity(query, vector));
+  } catch (error) {
+    console.warn("⚠ Topic embedding unavailable, skipping fact ranking:", error.message);
+    return null;
+  }
 };

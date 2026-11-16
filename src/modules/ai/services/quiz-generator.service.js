@@ -7,11 +7,25 @@ import { serializeGeneratedQuiz } from "../serializers/quiz-generator.serializer
 import { extractDocumentText } from "../utils/documentTextExtractor.js";
 import { mergeAvoidQuestionLists } from "../utils/quizQuestionDedup.js";
 import { resolveUniqueQuizTitle } from "../utils/quizTitle.js";
-import { extractFacts } from "../../study-material/fact-extractor.js";
+import {
+  extractFactsFromSources,
+  isOutlineText,
+  keepTopFacts,
+  selectFactsInPassages,
+} from "../../study-material/fact-extractor.js";
+import { assistantService } from "../../assistant/index.js";
+import { rankByTopic } from "../utils/topicMatch.js";
 import { buildQuizFromFacts } from "../../study-material/study-items.js";
 
 const NOT_ENOUGH_FACTS =
   "Need at least 4 distinct facts in your notes to build a quiz. Add a few terms and definitions, then try again.";
+const OUTLINE_ONLY =
+  "These notes look like a course outline (chapter and lesson titles only), so there is nothing to quiz on yet. Add notes that explain the lessons, then try again.";
+
+const notEnoughFactsError = (documentTexts) =>
+  ApiError.badRequest(
+    documentTexts.some((text) => isOutlineText(text)) ? OUTLINE_ONLY : NOT_ENOUGH_FACTS,
+  );
 
 const resolveSubjectIdFromContent = (content) =>
   content?.subjectId ?? content?.subject_id ?? null;
@@ -26,7 +40,8 @@ const resolveGenerationOptions = ({
   forceRegenerate: forceRegenerate !== false,
 });
 
-const collectDocumentText = async (items) => {
+/** Text of the first 6 readable items, one entry per item so facts can be balanced across them. */
+const collectDocumentTexts = async (items) => {
   const parts = [];
   for (const item of items) {
     if (parts.length >= 6) break;
@@ -38,12 +53,47 @@ const collectDocumentText = async (items) => {
       continue;
     }
   }
-  return parts.join("\n\n");
+  return parts;
 };
 
-const topicMatches = (item, tokens) => {
-  const haystack = `${item.title ?? ""} ${item.description ?? ""} ${item.content ?? ""}`.toLowerCase();
-  return tokens.some((token) => haystack.includes(token));
+/**
+ * Facts about `topic` found through the Ask AI index (keyword + embedding search).
+ * Null when the index has nothing relevant or too few facts, so the caller falls back
+ * to keyword ranking of whole notes.
+ */
+const factsForTopic = async (userId, items, { subjectId = null, topic, numberOfQuestions }) => {
+  let passages = [];
+  try {
+    passages = await assistantService.findTopicPassages(userId, { subjectId, topic });
+  } catch (error) {
+    console.warn("Quiz topic search unavailable, using keyword match:", error.message);
+    return null;
+  }
+  if (!passages.length) return null;
+
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const documents = [];
+  for (const id of new Set(passages.map((passage) => passage.contentId))) {
+    const item = byId.get(id);
+    if (!item) continue;
+    try {
+      const text = await extractDocumentText(item);
+      documents.push({ id, text: `# ${item.title?.trim() || "Note"}\n${text}` });
+    } catch {
+      continue;
+    }
+  }
+
+  const candidates = selectFactsInPassages(documents, passages, { limit: 80 });
+  if (candidates.length < 4) return null;
+
+  // Passages are coarse; rank each fact against the topic and keep the closest ones.
+  const scores = await assistantService.scoreTextsForTopic(
+    topic,
+    candidates.map((fact) => fact.sentence),
+  );
+  if (!scores) return keepTopFacts(candidates, [], { max: 30 });
+  return keepTopFacts(candidates, scores, { min: Math.max(8, numberOfQuestions + 3) });
 };
 
 const persistGeneratedQuiz = async ({
@@ -79,7 +129,8 @@ const generateAndSaveQuiz = async ({
   userId,
   subjectId,
   sourceDocumentId = null,
-  documentText,
+  documentTexts = [],
+  facts: preselectedFacts = null,
   title,
   difficulty,
   numberOfQuestions,
@@ -92,8 +143,8 @@ const generateAndSaveQuiz = async ({
     if (existing) return serializeGeneratedQuiz(existing, difficulty);
   }
 
-  const facts = extractFacts(documentText);
-  if (facts.length < 4) throw ApiError.badRequest(NOT_ENOUGH_FACTS);
+  const facts = preselectedFacts ?? extractFactsFromSources(documentTexts);
+  if (facts.length < 4) throw notEnoughFactsError(documentTexts);
 
   const avoidQuestions = mergeAvoidQuestionLists(
     await quizGeneratorRepository.findPreviousQuestionTexts(avoidLookup),
@@ -138,7 +189,7 @@ export const generateQuizFromDocument = async (
     userId,
     subjectId,
     sourceDocumentId: documentId,
-    documentText,
+    documentTexts: [documentText],
     title: content.title,
     difficulty,
     numberOfQuestions,
@@ -166,17 +217,29 @@ export const generateQuizFromSubject = async (
 
   const subject = await getSubjectById(userId, subjectId);
   const items = await contentRepository.findBySubjectId(userId, subjectId);
-  const documentText = await collectDocumentText(items);
-  if (!documentText) {
-    throw ApiError.badRequest(
-      "Add a note or file in this subject before generating a quiz.",
-    );
+  const topic = String(options.topic ?? "").trim();
+
+  // 1) Passages about the topic from the search index. 2) Notes mentioning the topic.
+  // 3) The whole subject.
+  const facts = topic
+    ? await factsForTopic(userId, items, { subjectId, topic, numberOfQuestions })
+    : null;
+  let documentTexts = [];
+  if (!facts) {
+    const onTopic = rankByTopic(items, topic);
+    documentTexts = await collectDocumentTexts(onTopic.length ? onTopic : items);
+    if (!documentTexts.length) {
+      throw ApiError.badRequest(
+        "Add a note or file in this subject before generating a quiz.",
+      );
+    }
   }
 
   return generateAndSaveQuiz({
     userId,
     subjectId,
-    documentText,
+    facts,
+    documentTexts,
     title: subject.name,
     difficulty,
     numberOfQuestions,
@@ -195,24 +258,21 @@ export const generatePracticeQuiz = async (userId, options = {}) => {
   }
 
   const subjectId = options.subjectId ?? null;
-  const tokens = topic
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((token) => token.length > 1);
 
   const items = await contentRepository.findAllByUserId(
     userId,
     subjectId ? { subjectId } : {},
   );
-  const matched = tokens.length
-    ? items.filter((item) => topicMatches(item, tokens))
-    : items;
-  const documentText = await collectDocumentText(matched);
-
-  if (!documentText) {
-    throw ApiError.badRequest(
-      "No note or file matches that topic. Add study material first.",
-    );
+  // Search-index passages first; notes mentioning the topic as fallback.
+  const facts = await factsForTopic(userId, items, { subjectId, topic, numberOfQuestions });
+  let documentTexts = [];
+  if (!facts) {
+    documentTexts = await collectDocumentTexts(rankByTopic(items, topic));
+    if (!documentTexts.length) {
+      throw ApiError.badRequest(
+        "No note or file matches that topic. Add study material first.",
+      );
+    }
   }
 
   let title = topic;
@@ -224,7 +284,8 @@ export const generatePracticeQuiz = async (userId, options = {}) => {
   return generateAndSaveQuiz({
     userId,
     subjectId,
-    documentText,
+    facts,
+    documentTexts,
     title,
     difficulty,
     numberOfQuestions,

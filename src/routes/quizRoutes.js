@@ -7,7 +7,9 @@ import {
   submitQuizAttemptSchema,
 } from "../validations/quizAttempt.validation.js";
 import {
+  createQuizSchema,
   quizIdParamSchema as quizUpdateIdParamSchema,
+  updateQuizContentSchema,
   updateQuizTitleSchema,
 } from "../validations/quiz.validation.js";
 
@@ -47,7 +49,7 @@ const router = Router();
 
 router.use(verifyTokenMiddleware);
 
-router.post("/", quizController.create);
+router.post("/", validateBody(createQuizSchema), quizController.create);
 router.get("/", quizController.getAll);
 
 router.post(
@@ -76,7 +78,12 @@ router.patch(
   validateBody(updateQuizTitleSchema),
   quizController.patchTitle,
 );
-router.put("/:id", quizController.update);
+router.put(
+  "/:id",
+  validateParams(quizUpdateIdParamSchema),
+  validateBody(updateQuizContentSchema),
+  quizController.update,
+);
 router.delete("/:id", quizController.remove);
 
 export default router;

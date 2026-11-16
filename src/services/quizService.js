@@ -1,4 +1,5 @@
 import sequelize from "../config/database.js";
+import ApiError from "../utils/ApiError.js";
 
 const ALLOWED_LIST_FILTERS = new Set(["subjectId", "source"]);
 
@@ -14,14 +15,34 @@ const pickListFilters = (filters = {}) => {
   return where;
 };
 
+const LETTERS = ["A", "B", "C", "D"];
+
+// Keep the stored letter in sync with correctIndex; older readers use either.
+const withAnswerLetters = (questions) =>
+  questions.map((question) => ({
+    ...question,
+    correctAnswer: LETTERS[question.correctIndex],
+  }));
+
+export const EDITED_AI_QUIZ_DESCRIPTION =
+  "Generated from your notes, then edited by you.";
+
 export const create = async (userId, data) => {
-  const { Quiz } = sequelize.models;
-  const { documentId: _documentId, ...payload } = data ?? {};
+  const { Quiz, Subject } = sequelize.models;
+  const { title, description = null, subjectId = null, questions } = data;
+
+  if (subjectId) {
+    const subject = await Subject.findOne({ where: { id: subjectId, userId } });
+    if (!subject) throw ApiError.notFound("Subject not found");
+  }
 
   return Quiz.create({
-    ...payload,
     userId,
-    source: payload.source ?? "manual",
+    subjectId,
+    title,
+    description,
+    questions: withAnswerLetters(questions),
+    source: "manual",
   });
 };
 
@@ -78,7 +99,17 @@ export const update = async (userId, id, data) => {
 
   if (!item) return null;
 
-  return item.update(data);
+  const changes = {};
+  if (data.title !== undefined) changes.title = data.title;
+  if (data.questions !== undefined) {
+    changes.questions = withAnswerLetters(data.questions);
+    // The generated description promises every answer comes from the notes; edits break that.
+    if (item.source === "ai_generated") {
+      changes.description = EDITED_AI_QUIZ_DESCRIPTION;
+    }
+  }
+
+  return item.update(changes);
 };
 
 export const remove = async (userId, id) => {

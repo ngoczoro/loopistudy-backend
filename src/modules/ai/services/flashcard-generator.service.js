@@ -1,7 +1,7 @@
 import ApiError from "../../../utils/ApiError.js";
 import { resolveAccessibleContent } from "../shared/contentAccess.js";
 import { extractDocumentText } from "../utils/documentTextExtractor.js";
-import { extractFacts } from "../../study-material/fact-extractor.js";
+import { extractFacts, isOutlineText } from "../../study-material/fact-extractor.js";
 import { buildFlashcardsFromFacts } from "../../study-material/study-items.js";
 
 const resolveSubjectIdFromContent = (content) =>
@@ -19,7 +19,9 @@ export const generateFlashcardsFromNote = async (
 
   if (facts.length === 0) {
     throw ApiError.badRequest(
-      "This document does not have facts that can become flashcards yet.",
+      isOutlineText(documentText)
+        ? "This document looks like a course outline (chapter and lesson titles only). Add notes that explain the lessons to make flashcards."
+        : "This document does not have facts that can become flashcards yet.",
     );
   }
 

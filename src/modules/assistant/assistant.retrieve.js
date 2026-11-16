@@ -352,21 +352,15 @@ export const buildExcerpt = (chunkText, query, maxLen = RETRIEVE_EXCERPT_CHARS) 
 };
 
 /**
- * Keyword retrieval over indexed chunks in scope (P2).
- * Embedding re-rank is applied when vectors exist (same model).
+ * Hybrid keyword + embedding score for every chunk, best first, below-threshold chunks dropped.
+ * Shared by Ask AI and quiz topic selection so both rank passages the same way.
  */
-export const retrieveChunks = async (userId, scope, question, { queryEmbedding = null } = {}) => {
-  const contentIds = await indexRepository.listSearchableContentIds(userId, scope);
-  if (contentIds.length === 0) return { contentIds, hits: [] };
-
-  // User explicitly pinned one file — prefer returning its best chunks over empty not_found.
-  const pinnedSingleDoc = contentIds.length === 1;
+const scoreChunks = (chunks, question, { queryEmbedding = null, pinnedSingleDoc = false } = {}) => {
   const minScore = pinnedSingleDoc ? RETRIEVE_MIN_SCORE_PINNED : RETRIEVE_MIN_SCORE;
   const minSemanticAlone = pinnedSingleDoc
     ? RETRIEVE_MIN_SEMANTIC_PINNED
     : RETRIEVE_MIN_SEMANTIC_ALONE;
 
-  const chunks = await indexRepository.listChunksForContents(userId, contentIds);
   const prelim = chunks.map((chunk) => {
     const keywordScore = scoreChunk(chunk.chunkText, question, {
       title: chunk.content?.title,
@@ -380,7 +374,7 @@ export const retrieveChunks = async (userId, scope, question, { queryEmbedding =
 
   const maxSemantic = prelim.reduce((max, item) => Math.max(max, item.semantic), 0);
 
-  let scored = prelim
+  const scored = prelim
     .map((item) => {
       let score = item.keywordScore;
       if (queryEmbedding && item.chunk.embedding?.length) {
@@ -398,8 +392,25 @@ export const retrieveChunks = async (userId, scope, question, { queryEmbedding =
       return { chunk: item.chunk, score, keywordScore: item.keywordScore };
     })
     .filter((item) => item.score >= minScore)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, RETRIEVE_TOP_K);
+    .sort((a, b) => b.score - a.score);
+
+  return { scored, prelim };
+};
+
+/**
+ * Keyword retrieval over indexed chunks in scope (P2).
+ * Embedding re-rank is applied when vectors exist (same model).
+ */
+export const retrieveChunks = async (userId, scope, question, { queryEmbedding = null } = {}) => {
+  const contentIds = await indexRepository.listSearchableContentIds(userId, scope);
+  if (contentIds.length === 0) return { contentIds, hits: [] };
+
+  // User explicitly pinned one file — prefer returning its best chunks over empty not_found.
+  const pinnedSingleDoc = contentIds.length === 1;
+  const chunks = await indexRepository.listChunksForContents(userId, contentIds);
+  const ranked = scoreChunks(chunks, question, { queryEmbedding, pinnedSingleDoc });
+  const { prelim } = ranked;
+  let scored = ranked.scored.slice(0, RETRIEVE_TOP_K);
 
   // Last resort for a pinned doc: still surface the strongest in-doc chunk(s).
   if (pinnedSingleDoc && scored.length === 0 && prelim.length > 0) {
@@ -425,6 +436,29 @@ export const retrieveChunks = async (userId, scope, question, { queryEmbedding =
   }));
 
   return { contentIds, hits };
+};
+
+/**
+ * Full text of the indexed chunks most related to a topic (no excerpting), best first.
+ * Empty when nothing in scope is indexed or nothing clears the relevance threshold.
+ */
+export const rankChunksForTopic = async (
+  userId,
+  scope,
+  topic,
+  { queryEmbedding = null, limit = 15 } = {},
+) => {
+  const contentIds = await indexRepository.listSearchableContentIds(userId, scope);
+  if (contentIds.length === 0) return [];
+
+  const chunks = await indexRepository.listChunksForContents(userId, contentIds);
+  const { scored } = scoreChunks(chunks, topic, { queryEmbedding });
+
+  return scored.slice(0, limit).map((item) => ({
+    contentId: item.chunk.contentId,
+    chunkText: item.chunk.chunkText,
+    score: Math.round(item.score * 100) / 100,
+  }));
 };
 
 export const buildExtractiveAnswer = (hits) => {
