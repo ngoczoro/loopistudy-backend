@@ -129,6 +129,9 @@ loopistudy-backend/
 - npm or yarn
 - PostgreSQL 12 or higher
 - Git
+- eSpeak NG, for vocabulary flashcard audio (generated on this server, not an external TTS API)
+  - macOS: `brew install espeak-ng`
+  - Windows: install from the [eSpeak NG releases](https://github.com/espeak-ng/espeak-ng/releases), then add it to PATH or set `ESPEAK_BIN` in `.env`
 
 ### Step 1: Clone Repository
 
