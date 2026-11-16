@@ -11,7 +11,7 @@ export const generateDocumentQuiz = asyncHandler(async (req, res) => {
   );
 
   res.status(201).json(
-    buildSuccessResponse("AI quiz generated successfully", data),
+    buildSuccessResponse("Quiz generated from your notes", data),
   );
 });
 
@@ -23,7 +23,7 @@ export const generateSubjectQuiz = asyncHandler(async (req, res) => {
   );
 
   res.status(201).json(
-    buildSuccessResponse("AI quiz generated successfully", data),
+    buildSuccessResponse("Quiz generated from your notes", data),
   );
 });
 
@@ -34,6 +34,6 @@ export const generatePracticeQuiz = asyncHandler(async (req, res) => {
   );
 
   res.status(201).json(
-    buildSuccessResponse("AI quiz generated successfully", data),
+    buildSuccessResponse("Quiz generated from your notes", data),
   );
 });

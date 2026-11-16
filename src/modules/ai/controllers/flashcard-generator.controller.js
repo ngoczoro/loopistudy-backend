@@ -11,6 +11,6 @@ export const generateDocumentFlashcards = asyncHandler(async (req, res) => {
   );
 
   res.status(200).json(
-    buildSuccessResponse("AI flashcards generated successfully", data),
+    buildSuccessResponse("Flashcards drafted from your notes", data),
   );
 });
