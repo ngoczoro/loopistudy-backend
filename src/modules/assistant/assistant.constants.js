@@ -41,8 +41,22 @@ export const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 60_000)
 export const OPENAI_ASSISTANT_TIMEOUT_MS = Number(
   process.env.OPENAI_ASSISTANT_TIMEOUT_MS || 30_000,
 );
-/** Empty disables the Ollama tier (OpenAI / extractive still work). */
-export const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+/**
+ * Streaming: wait this long for Ollama's first token. On CPU it reads the whole RAG prompt
+ * first (~25s for 5 passages on an i7-1255U), so keep it well above that.
+ */
+export const OLLAMA_FIRST_TOKEN_TIMEOUT_MS = Number(
+  process.env.OLLAMA_FIRST_TOKEN_TIMEOUT_MS || OLLAMA_TIMEOUT_MS,
+);
+/** Streaming: give up on a provider that stops sending tokens for this long. */
+export const STREAM_IDLE_TIMEOUT_MS = Number(process.env.ASSISTANT_STREAM_IDLE_MS || 20_000);
+/** Keep the model in RAM between questions so later ones skip the ~5s load. */
+export const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || "30m";
+/**
+ * Empty disables the Ollama tier (OpenAI / extractive still work).
+ * `??` not `||`, so an empty value in .env does not fall back to localhost.
+ */
+export const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
 export const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b";
 export const EMBEDDING_MODEL =
   process.env.ASSISTANT_EMBEDDING_MODEL || "Xenova/multilingual-e5-small";

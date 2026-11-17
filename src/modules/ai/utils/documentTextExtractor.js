@@ -10,6 +10,8 @@ import { getExtension, isImageFile } from "../../../shared/utils/contentFileType
 import { truncateInput } from "./inputGuard.js";
 import { MAX_AI_INPUT_CHARS } from "../ai.constants.js";
 import { extractTextFromPptxBuffer } from "./pptxTextExtractor.js";
+import { docxHtmlToText } from "./docxHtmlToText.js";
+import { joinWrappedPdfLines } from "./pdfText.js";
 
 const UNSUPPORTED_MESSAGE =
   "This file type is not supported for AI summary yet.";
@@ -33,7 +35,8 @@ const extractPdfText = async (item) => {
   const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js");
   const buffer = await fetchFileBuffer(item.fileUrl);
   const result = await pdfParse(buffer);
-  return result.text ?? "";
+  // Rejoin sentences that wrap across printed lines so quiz sentences are not cut in half.
+  return joinWrappedPdfLines(result.text ?? "");
 };
 
 const extractExcelText = async (item) => {
@@ -71,7 +74,8 @@ const extractPptxText = async (item) => {
 
   try {
     const buffer = await fetchFileBuffer(item.fileUrl);
-    return extractTextFromPptxBuffer(buffer);
+    // await so a broken .pptx is caught below instead of escaping as a raw rejection.
+    return await extractTextFromPptxBuffer(buffer);
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw ApiError.badRequest("Unable to read this presentation file.");
@@ -102,7 +106,8 @@ const extractFileText = async (item) => {
 
   if (ext === "docx") {
     const preview = await fetchDocPreview(item);
-    return preview.text ?? "";
+    // The HTML keeps headings and bullet lists apart (raw text does not); fall back if empty.
+    return docxHtmlToText(preview.html) || preview.text || "";
   }
 
   if (ext === "ppt") {

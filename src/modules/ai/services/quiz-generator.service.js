@@ -57,7 +57,8 @@ const collectDocumentTexts = async (items) => {
 };
 
 /**
- * Facts about `topic` found through the Ask AI index (keyword + embedding search).
+ * Facts about `topic` found through the Ask AI index (keyword + embedding search), plus the
+ * full text of the notes they came from (`sources`, for list questions).
  * Null when the index has nothing relevant or too few facts, so the caller falls back
  * to keyword ranking of whole notes.
  */
@@ -92,8 +93,12 @@ const factsForTopic = async (userId, items, { subjectId = null, topic, numberOfQ
     topic,
     candidates.map((fact) => fact.sentence),
   );
-  if (!scores) return keepTopFacts(candidates, [], { max: 30 });
-  return keepTopFacts(candidates, scores, { min: Math.max(8, numberOfQuestions + 3) });
+  const sources = documents.map((doc) => doc.text);
+  if (!scores) return { facts: keepTopFacts(candidates, [], { max: 30 }), sources };
+  return {
+    facts: keepTopFacts(candidates, scores, { min: Math.max(8, numberOfQuestions + 3) }),
+    sources,
+  };
 };
 
 const persistGeneratedQuiz = async ({
@@ -143,8 +148,9 @@ const generateAndSaveQuiz = async ({
     if (existing) return serializeGeneratedQuiz(existing, difficulty);
   }
 
+  // No minimum here: slides with only titles and bullets have few facts but still give list
+  // questions. Too little material shows up as an empty quiz below.
   const facts = preselectedFacts ?? extractFactsFromSources(documentTexts);
-  if (facts.length < 4) throw notEnoughFactsError(documentTexts);
 
   const avoidQuestions = mergeAvoidQuestionLists(
     await quizGeneratorRepository.findPreviousQuestionTexts(avoidLookup),
@@ -155,9 +161,10 @@ const generateAndSaveQuiz = async ({
     difficulty,
     title,
     avoidQuestions,
+    sources: documentTexts,
   });
 
-  if (!normalized.questions.length) throw ApiError.badRequest(NOT_ENOUGH_FACTS);
+  if (!normalized.questions.length) throw notEnoughFactsError(documentTexts);
 
   const saved = await persistGeneratedQuiz({
     userId,
@@ -221,10 +228,11 @@ export const generateQuizFromSubject = async (
 
   // 1) Passages about the topic from the search index. 2) Notes mentioning the topic.
   // 3) The whole subject.
-  const facts = topic
+  const onTopicFacts = topic
     ? await factsForTopic(userId, items, { subjectId, topic, numberOfQuestions })
     : null;
-  let documentTexts = [];
+  const facts = onTopicFacts?.facts ?? null;
+  let documentTexts = onTopicFacts?.sources ?? [];
   if (!facts) {
     const onTopic = rankByTopic(items, topic);
     documentTexts = await collectDocumentTexts(onTopic.length ? onTopic : items);
@@ -264,8 +272,9 @@ export const generatePracticeQuiz = async (userId, options = {}) => {
     subjectId ? { subjectId } : {},
   );
   // Search-index passages first; notes mentioning the topic as fallback.
-  const facts = await factsForTopic(userId, items, { subjectId, topic, numberOfQuestions });
-  let documentTexts = [];
+  const onTopicFacts = await factsForTopic(userId, items, { subjectId, topic, numberOfQuestions });
+  const facts = onTopicFacts?.facts ?? null;
+  let documentTexts = onTopicFacts?.sources ?? [];
   if (!facts) {
     documentTexts = await collectDocumentTexts(rankByTopic(items, topic));
     if (!documentTexts.length) {

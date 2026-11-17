@@ -3,30 +3,34 @@ import ApiError from "../../../utils/ApiError.js";
 
 const SLIDE_PATH_PATTERN = /^ppt\/slides\/slide(\d+)\.xml$/i;
 
-/** Extract visible text runs from OpenXML slide markup. */
-export const extractTextFromSlideXml = (xml = "") => {
-  const tokenPattern = /<a:t(?:\s[^>]*)?>([^<]*)<\/a:t>|<a:br\b[^>]*\/?>/g;
-  let result = "";
+const PARAGRAPH_PATTERN = /<a:p\b[^>]*>([\s\S]*?)<\/a:p>/g;
+const RUN_PATTERN = /<a:t(?:\s[^>]*)?>([^<]*)<\/a:t>|<a:br\b[^>]*\/?>/g;
 
-  for (const match of xml.matchAll(tokenPattern)) {
-    if (match[0].startsWith("<a:br")) {
-      if (result && !result.endsWith("\n")) {
-        result += "\n";
-      }
-      continue;
-    }
-
-    const value = match[1]?.trim();
-    if (!value) continue;
-
-    if (result && !result.endsWith("\n") && !result.endsWith(" ")) {
-      result += " ";
-    }
-    result += value;
+/**
+ * Text of one <a:p>: runs joined as-is, <a:br/> as a line break. Runs carry their own spaces
+ * and a word can be split across runs (["M", "ultiple computers"]), so never add a space here.
+ */
+const paragraphText = (xml) => {
+  let text = "";
+  for (const match of xml.matchAll(RUN_PATTERN)) {
+    text += match[0].startsWith("<a:br") ? "\n" : match[1] ?? "";
   }
-
-  return result.replace(/[ \t]+/g, " ").trim();
+  return text
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
 };
+
+/**
+ * Extract visible text from OpenXML slide markup, one line per paragraph, so a slide's title
+ * and its bullet items stay separate ("Advantages" / "Back-up and restore data" / …).
+ */
+export const extractTextFromSlideXml = (xml = "") =>
+  [...xml.matchAll(PARAGRAPH_PATTERN)]
+    .map((match) => paragraphText(match[1]))
+    .filter(Boolean)
+    .join("\n");
 
 const sortSlideEntries = (entries) =>
   entries.sort((a, b) => Number(a.number) - Number(b.number));

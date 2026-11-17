@@ -1,6 +1,9 @@
 import { getOpenAIConfig } from "../ai/ai.constants.js";
 import { generateJson } from "../ai/services/ai.provider.service.js";
 import { completeJson, ollamaModelName } from "./ollama.js";
+import { buildClozeCards, buildSentenceQuestions, sentenceQuestionIsGrounded } from "./sentence-items.js";
+import { buildListCards, buildListQuestions, listQuestionIsGrounded } from "./list-items.js";
+import { buildReasoningQuestions, reasoningQuestionIsGrounded } from "./reasoning-items.js";
 
 const LETTERS = ["A", "B", "C", "D"];
 
@@ -300,8 +303,18 @@ export const buildOptions = (correctFact, pool, random = Math.random, blocked = 
   };
 };
 
-/** A question is kept only when the explanation and every option are facts from this document. */
-export const questionIsGrounded = (question, facts) => {
+/**
+ * A question is kept only when what it shows comes from this document.
+ * "definition" (the default): the explanation and every option are facts of the note.
+ * "cloze" / "statement": see sentenceQuestionIsGrounded.
+ * "list": see listQuestionIsGrounded (needs the raw `sources`; facts lose list structure).
+ */
+export const questionIsGrounded = (question, facts, { sources = [] } = {}) => {
+  if (question?.kind === "cloze" || question?.kind === "statement") {
+    return sentenceQuestionIsGrounded(question, facts);
+  }
+  if (question?.kind === "list") return listQuestionIsGrounded(question, sources);
+  if (question?.kind === "reasoning") return reasoningQuestionIsGrounded(question, sources);
   if (!question?.question || question.options?.length !== 4) return false;
   const explanationKey = normalizeStudyText(question.explanation);
   const source = facts.find((fact) => normalizeStudyText(fact.sentence) === explanationKey);
@@ -320,21 +333,75 @@ const stemFor = (fact, difficulty, rewritten, label) => {
   return templateQuestion(fact, difficulty, label);
 };
 
+const SENTENCE_LEVEL = { list: "easy", cloze: "medium", statement: "hard" };
+
 /**
- * One quiz pipeline: facts in, grounded options only.
- * Question wording tries Ollama, then OpenAI. `rewriteQuestions` is injectable so tests do not call either.
+ * Take questions round-robin across kinds (definition, cloze, statement) so one quiz mixes them.
+ * A note sentence is asked about once, and previously asked stems are skipped.
+ */
+const mixQuestionKinds = (lists, limit, avoid) => {
+  const picked = [];
+  const usedSources = new Set();
+  const queues = lists.map((list) => [...list]);
+  while (picked.length < limit && queues.some((queue) => queue.length)) {
+    for (const queue of queues) {
+      if (picked.length >= limit) break;
+      while (queue.length) {
+        const question = queue.shift();
+        const source = question.sourceKey ?? normalizeStudyText(question.explanation);
+        if (usedSources.has(source) || avoid.has(normalizeStudyText(question.question))) continue;
+        usedSources.add(source);
+        picked.push(question);
+        break;
+      }
+    }
+  }
+  return picked;
+};
+
+/**
+ * One quiz pipeline: facts in, grounded options only. Three kinds of question:
+ *   definition  "X là gì?" (wording tries Ollama, then OpenAI, then a template)
+ *   cloze / statement  built from note sentences in code, no model call (sentence-items.js)
+ *   list  "which item is listed under X" from heading + bullet blocks in `sources` (list-items.js)
+ *   reasoning  "why / what if / how do A and B differ", written by Ollama (OpenAI fallback) from a
+ *              note paragraph and checked against a quoted evidence sentence (reasoning-items.js)
+ * `sources` are the raw note texts; slides with only titles and bullets need them.
+ * `rewriteQuestions` and `generateReasoning` are injectable so tests do not call a model.
  */
 export const buildQuizFromFacts = async (
   facts,
-  { numberOfQuestions = 5, difficulty = "mixed", title = "Quiz", avoidQuestions = [] } = {},
-  { rewriteQuestions = rewriteQuestionsWithOllama, random = Math.random } = {},
+  {
+    numberOfQuestions = 5,
+    difficulty = "mixed",
+    title = "Quiz",
+    avoidQuestions = [],
+    sources = [],
+  } = {},
+  {
+    rewriteQuestions = rewriteQuestionsWithOllama,
+    generateReasoning = buildReasoningQuestions,
+    random = Math.random,
+  } = {},
 ) => {
+  // At most a couple per quiz: each one is a model call (~15-30 s on a CPU-only machine).
+  const reasoning = await generateReasoning({
+    sources,
+    facts,
+    limit: Math.min(2, Math.ceil(numberOfQuestions / 3)),
+    difficulty: ["easy", "medium", "hard"].includes(difficulty) ? difficulty : "hard",
+  });
+
   const counts = termCounts(facts);
   const labeled = facts.filter(
     (fact) => labelForFact(fact, counts) && substantiveAnswer(fact),
   );
-  const pool = shuffle(labeled.length >= 4 ? labeled : facts, random);
-  const count = Math.min(numberOfQuestions, pool.length);
+  const sentenceQuestions = buildSentenceQuestions(facts, { random });
+  // Definition questions need four labeled facts (one answer, three distractors). The old
+  // fallback used unlabeled lines and asked "which line is from your notes?" with four lines
+  // that all were: no wrong answer. Too few facts now means fewer questions, never that.
+  const pool = shuffle(labeled, random);
+  const count = labeled.length >= 4 ? Math.min(numberOfQuestions, pool.length) : 0;
   const avoid = new Set(avoidQuestions.map((item) => normalizeStudyText(item)));
   const targets = pool.filter((fact) => {
     const label = labelForFact(fact, counts);
@@ -344,7 +411,8 @@ export const buildQuizFromFacts = async (
 
   let rewritten = new Map();
   try {
-    rewritten = await rewriteQuestions(
+    // Rewording only polishes "X là gì?" stems; skip that extra model call when one already ran.
+    if (targets.length && !reasoning.length) rewritten = await rewriteQuestions(
       targets.map((fact, index) => ({
         fact,
         label: labelForFact(fact, counts),
@@ -355,8 +423,7 @@ export const buildQuizFromFacts = async (
     console.warn("Study quiz wording fell back to templates:", error.message);
   }
 
-  const questions = [];
-  let usedModelWording = false;
+  const definitions = [];
   const usedDistractors = new Set();
   for (let index = 0; index < targets.length; index += 1) {
     const fact = targets[index];
@@ -370,17 +437,41 @@ export const buildQuizFromFacts = async (
     const { distractorFacts, ...stored } = built;
     const proposed = rewritten.get(fact.id);
     const question = {
+      kind: "definition",
       question: stemFor(fact, level, rewritten, label),
       difficulty: level,
       ...stored,
     };
-    if (proposed && question.question === proposed) usedModelWording = true;
-    if (questionIsGrounded(question, facts)) questions.push(question);
+    question.modelWorded = Boolean(proposed && question.question === proposed);
+    if (questionIsGrounded(question, facts)) definitions.push(question);
   }
 
-  const model = usedModelWording
-    ? `${rewritten.wordingProvider || "ollama"}:${rewritten.wordingModel || ollamaModelName()}`
-    : "study-facts";
+  const sentenceLevel = (kind) =>
+    ["easy", "medium", "hard"].includes(difficulty) ? difficulty : SENTENCE_LEVEL[kind];
+  const groundedSentence = (list) =>
+    list
+      .filter((question) => questionIsGrounded(question, facts, { sources }))
+      .map((question) => ({ ...question, difficulty: sentenceLevel(question.kind) }));
+  const mixed = mixQuestionKinds(
+    [
+      reasoning.filter((question) => questionIsGrounded(question, facts, { sources })),
+      definitions,
+      groundedSentence(sentenceQuestions.cloze),
+      groundedSentence(sentenceQuestions.statement),
+      groundedSentence(buildListQuestions(sources, { random })),
+    ],
+    numberOfQuestions,
+    avoid,
+  );
+  const usedModelWording = mixed.some((question) => question.modelWorded);
+  const modelWritten = mixed.find((question) => question.kind === "reasoning");
+  const questions = mixed.map(({ modelWorded, sourceKey, provider, model, ...question }) => question);
+
+  let model = "study-facts";
+  if (modelWritten) model = `${modelWritten.provider}:${modelWritten.model}`;
+  else if (usedModelWording) {
+    model = `${rewritten.wordingProvider || "ollama"}:${rewritten.wordingModel || ollamaModelName()}`;
+  }
 
   const baseTitle = String(title || "Quiz").trim().slice(0, 180);
   const quizTitle = /quiz/i.test(baseTitle) ? baseTitle : `${baseTitle} quiz`;
@@ -388,7 +479,7 @@ export const buildQuizFromFacts = async (
   return {
     title: quizTitle.slice(0, 200),
     description: "Each question is checked against a fact in your own notes.",
-    questions: questions.slice(0, numberOfQuestions),
+    questions,
     model,
   };
 };
@@ -432,19 +523,27 @@ export const cardIsGrounded = (card, fact) => {
   );
 };
 
+/**
+ * Definition cards for labeled facts ("X là gì?" / definition), topped up with cloze cards
+ * ("___ cho phép…" / term) when the note has few "term: definition" lines.
+ */
 export const buildFlashcardsFromFacts = async (
   facts,
-  { numberOfCards = 5 } = {},
-  { rewriteFronts = rewriteCardFrontsWithOllama } = {},
+  { numberOfCards = 5, sources = [] } = {},
+  { rewriteFronts = rewriteCardFrontsWithOllama, random = Math.random } = {},
 ) => {
   const counts = termCounts(facts);
-  const selected = facts
-    .filter((fact) => labelForFact(fact, counts) || facts.length < 4)
+  // Same bar as quiz definitions: a title line like "Java — Practice Problems" is not a card.
+  const labeled = facts
+    .filter((fact) => labelForFact(fact, counts) && substantiveAnswer(fact))
     .slice(0, numberOfCards);
-  const chosen = selected.length ? selected : facts.slice(0, numberOfCards);
+  // Cloze cards first (they test recall of a term), then one card per bullet list.
+  const clozeCards = [...buildClozeCards(facts, { random }), ...buildListCards(sources)];
+  // Unlabeled lines only become cards ("what does this part say?") when nothing better exists.
+  const chosen = labeled.length || clozeCards.length ? labeled : facts.slice(0, numberOfCards);
   let fronts = new Map();
   try {
-    fronts = await rewriteFronts(chosen);
+    if (chosen.length) fronts = await rewriteFronts(chosen);
   } catch (error) {
     console.warn("Study flashcard wording fell back to templates:", error.message);
   }
@@ -459,6 +558,14 @@ export const buildFlashcardsFromFacts = async (
     }
     const card = { front, back };
     if (cardIsGrounded(card, fact)) cards.push(card);
+  }
+
+  const seenFronts = new Set(cards.map((card) => normalizeStudyText(card.front)));
+  for (const card of clozeCards) {
+    if (cards.length >= numberOfCards) break;
+    if (seenFronts.has(normalizeStudyText(card.front))) continue;
+    seenFronts.add(normalizeStudyText(card.front));
+    cards.push(card);
   }
 
   return cards;

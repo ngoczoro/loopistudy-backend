@@ -8,6 +8,7 @@ import {
   listMessages,
   listSources,
   sendMessage,
+  streamMessage,
   updateConversation,
 } from "./assistant.controller.js";
 import {
@@ -64,6 +65,12 @@ router.post(
   validateParams(conversationIdParamSchema),
   validateBody(sendMessageSchema),
   sendMessage,
+);
+router.post(
+  "/conversations/:conversationId/messages/stream",
+  validateParams(conversationIdParamSchema),
+  validateBody(sendMessageSchema),
+  streamMessage,
 );
 
 export default router;

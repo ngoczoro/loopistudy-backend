@@ -19,14 +19,23 @@ const parseJsonObject = (raw) => {
   }
 };
 
-/** Local Ollama JSON completion. Throws when the server is missing or too slow. */
-export const completeJson = async ({ system, user, numPredict = 800 }) => {
+/**
+ * Local Ollama JSON completion. Throws when the server is missing or too slow.
+ * `format` may be a JSON schema object to make small models return exactly that shape.
+ */
+export const completeJson = async ({
+  system,
+  user,
+  numPredict = 800,
+  format = "json",
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}) => {
   const baseUrl = resolveBaseUrl();
   if (!baseUrl) throw new Error("OLLAMA_URL is not configured");
 
   const model = ollamaModelName();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${baseUrl}/api/chat`, {
@@ -35,7 +44,7 @@ export const completeJson = async ({ system, user, numPredict = 800 }) => {
       body: JSON.stringify({
         model,
         stream: false,
-        format: "json",
+        format,
         options: { temperature: 0.4, num_predict: numPredict },
         messages: [
           { role: "system", content: system },
@@ -56,7 +65,7 @@ export const completeJson = async ({ system, user, numPredict = 800 }) => {
     return { model, json: parsed };
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw new Error(`Ollama timed out after ${DEFAULT_TIMEOUT_MS}ms`);
+      throw new Error(`Ollama timed out after ${timeoutMs}ms`);
     }
     throw error;
   } finally {

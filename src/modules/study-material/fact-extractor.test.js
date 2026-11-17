@@ -2,6 +2,7 @@ import {
   extractFacts,
   extractFactsFromSources,
   isOutlineText,
+  isQuestionTerm,
   isStructuralTerm,
   keepTopFacts,
   selectFactsInPassages,
@@ -46,6 +47,13 @@ describe("structural labels", () => {
     "keeps %s as a concept",
     (term) => expect(isStructuralTerm(term)).toBe(false),
   );
+});
+
+describe("question words", () => {
+  it.each(["What", "How", "Why it matters", "Tại sao", "Vì sao", "Như thế nào"])("%s is not a term", (term) =>
+    expect(isQuestionTerm(term)).toBe(true));
+  it.each(["Whatsapp", "Howard", "Ti thể", "Kế thừa"])("%s can be a term", (term) =>
+    expect(isQuestionTerm(term)).toBe(false));
 });
 
 describe("course outlines", () => {

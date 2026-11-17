@@ -1,7 +1,12 @@
 import { CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS } from "./assistant.constants.js";
 
-/** Bump when chunk boundaries change so the indexer re-embeds existing docs. */
-export const ASSISTANT_CHUNKER_VERSION = 2;
+/**
+ * Bump when chunk boundaries or text extraction change so the indexer re-embeds existing docs.
+ * v3: .pptx text was stored as "[object Promise]" (missing await) and must be re-extracted.
+ * v4: .pptx text keeps one line per paragraph (slide title and bullets no longer run together).
+ * v5: .pptx runs are joined without an added space ("M"+"ultiple" was indexed as "M ultiple").
+ */
+export const ASSISTANT_CHUNKER_VERSION = 5;
 
 /** Resume / lecture headings we keep glued to their body. */
 const KNOWN_SECTION_HEADERS = new Set(

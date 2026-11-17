@@ -17,18 +17,16 @@ export const generateFlashcardsFromNote = async (
   const documentText = await extractDocumentText(content);
   const facts = extractFacts(documentText);
 
-  if (facts.length === 0) {
+  // Slides with only titles and bullets have no facts but still give one card per list.
+  const cards = await buildFlashcardsFromFacts(facts, {
+    numberOfCards,
+    sources: [documentText],
+  });
+  if (cards.length === 0) {
     throw ApiError.badRequest(
       isOutlineText(documentText)
         ? "This document looks like a course outline (chapter and lesson titles only). Add notes that explain the lessons to make flashcards."
         : "This document does not have facts that can become flashcards yet.",
-    );
-  }
-
-  const cards = await buildFlashcardsFromFacts(facts, { numberOfCards });
-  if (cards.length === 0) {
-    throw ApiError.badRequest(
-      "This document does not have facts that can become flashcards yet.",
     );
   }
 

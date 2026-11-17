@@ -17,7 +17,7 @@ import {
   TITLE_FROM_QUESTION_MAX,
 } from "./assistant.constants.js";
 import { embedQuery, embedTexts } from "./assistant.embedding.js";
-import { generateRagAnswer } from "./assistant.llm.js";
+import { generateRagAnswer, streamRagAnswer } from "./assistant.llm.js";
 import {
   cosineSimilarity,
   rankChunksForTopic,
@@ -126,7 +126,8 @@ export const listMessages = async (userId, conversationId) => {
   return messages.map(serializeMessage);
 };
 
-const buildAssistantReply = async (userId, conversationId, scope, question) => {
+/** Passages for a question in the conversation scope (keyword + embedding when available). */
+const retrieveForQuestion = async (userId, scope, question) => {
   let queryEmbedding = null;
   try {
     queryEmbedding = await embedQuery(question);
@@ -137,7 +138,11 @@ const buildAssistantReply = async (userId, conversationId, scope, question) => {
   const { contentIds, hits } = await retrieveChunks(userId, scope, question, {
     queryEmbedding,
   });
+  return { contentIds, hits, retrieval: queryEmbedding ? "hybrid" : "keyword" };
+};
 
+/** Fixed reply when there is nothing to answer from; null when the LLM should answer. */
+const replyWithoutGeneration = ({ contentIds, hits }) => {
   if (contentIds.length === 0) {
     return {
       content: NO_SOURCES_MESSAGE,
@@ -155,10 +160,25 @@ const buildAssistantReply = async (userId, conversationId, scope, question) => {
       metadata: { provider: "retrieve", reason: "no_matching_chunks" },
     };
   }
+  return null;
+};
 
-  // Answers are grounded only on retrieved passages — no chat history in the prompt
-  // (keeps Ollama prompts smaller and avoids follow-up drift / timeouts).
-  const generated = await generateRagAnswer({ question, hits });
+const answeredReply = (generated, hits, retrieval) => {
+  // The models read the passages and found no answer: same reply as an empty search.
+  if (generated.refused) {
+    return {
+      content: NOT_FOUND_MESSAGE,
+      answerStatus: ANSWER_STATUS.NOT_FOUND,
+      citations: [],
+      metadata: {
+        provider: "none",
+        reason: "models_refused",
+        retrieval,
+        errors: generated.errors ?? null,
+      },
+    };
+  }
+
   return {
     content: generated.content,
     answerStatus: ANSWER_STATUS.ANSWERED,
@@ -166,13 +186,28 @@ const buildAssistantReply = async (userId, conversationId, scope, question) => {
     metadata: {
       provider: generated.provider,
       model: generated.model ?? null,
-      retrieval: queryEmbedding ? "hybrid" : "keyword",
+      retrieval,
       errors: generated.errors ?? null,
     },
   };
 };
 
-export const sendMessage = async (userId, conversationId, payload) => {
+const buildAssistantReply = async (userId, scope, question) => {
+  const retrieved = await retrieveForQuestion(userId, scope, question);
+  const fixed = replyWithoutGeneration(retrieved);
+  if (fixed) return fixed;
+
+  // Answers are grounded only on retrieved passages — no chat history in the prompt
+  // (keeps Ollama prompts smaller and avoids follow-up drift / timeouts).
+  const generated = await generateRagAnswer({ question, hits: retrieved.hits });
+  return answeredReply(generated, retrieved.hits, retrieved.retrieval);
+};
+
+/**
+ * Ownership, non-empty question and the hourly limit. Runs before any streaming starts so
+ * these errors still reach the client as normal JSON responses.
+ */
+export const prepareQuestion = async (userId, conversationId, payload) => {
   const conversation = await requireOwnedConversation(userId, conversationId);
   const content = String(payload.content ?? "").trim();
   if (!content) throw ApiError.badRequest("Question is required");
@@ -185,14 +220,12 @@ export const sendMessage = async (userId, conversationId, payload) => {
       `Bạn đã hỏi ${QUESTIONS_PER_HOUR_LIMIT} câu trong một giờ. Hãy thử lại sau.`,
     );
   }
+  return { conversation, content };
+};
 
-  const reply = await buildAssistantReply(
-    userId,
-    conversationId,
-    conversation.scope,
-    content,
-  );
-
+/** Save the question and its answer together, and title a new conversation from it. */
+const saveExchange = async (userId, conversation, content, reply) => {
+  const conversationId = conversation.id;
   const result = await sequelize.transaction(async (transaction) => {
     const userMessage = await assistantRepository.createMessage(
       {
@@ -232,6 +265,50 @@ export const sendMessage = async (userId, conversationId, payload) => {
     assistantMessage: serializeMessage(result.assistantMessage),
     conversation: await conversationView(refreshed),
   };
+};
+
+export const sendMessage = async (userId, conversationId, payload) => {
+  const { conversation, content } = await prepareQuestion(userId, conversationId, payload);
+  const reply = await buildAssistantReply(userId, conversation.scope, content);
+  return saveExchange(userId, conversation, content, reply);
+};
+
+/**
+ * Same answer as sendMessage, streamed. Events, in order:
+ *   sources { citations }  passages the answer may cite (empty for not_found / no_sources)
+ *   token   { text }       next piece of the answer
+ *   provider { provider, model }  which model is answering (ollama / openai / extractive)
+ *   reset   {}             a provider failed mid-answer: clear the text, the next one restarts
+ *   done    { userMessage, assistantMessage, conversation }  saved, sanitized result
+ * Nothing is saved when the client disconnects before the end.
+ */
+export const streamMessage = async ({ userId, conversation, content, emit, signal }) => {
+  const retrieved = await retrieveForQuestion(userId, conversation.scope, content);
+  const fixed = replyWithoutGeneration(retrieved);
+
+  let reply = fixed;
+  if (fixed) {
+    emit("sources", { citations: [] });
+    emit("token", { text: fixed.content });
+  } else {
+    emit("sources", { citations: retrieved.hits });
+    const generated = await streamRagAnswer({
+      question: content,
+      hits: retrieved.hits,
+      onToken: (text) => emit("token", { text }),
+      onReset: () => emit("reset", {}),
+      onProvider: (source) => emit("provider", source),
+      signal,
+    });
+    reply = answeredReply(generated, retrieved.hits, retrieved.retrieval);
+    if (generated.refused) {
+      emit("sources", { citations: [] });
+      emit("token", { text: reply.content });
+    }
+  }
+
+  if (signal?.aborted) return;
+  emit("done", await saveExchange(userId, conversation, content, reply));
 };
 
 /**

@@ -42,6 +42,15 @@ const isAllCapsTitle = (term) => {
   return term.split(/\s+/).length >= 2 && letters.length >= 4 && letters === letters.toUpperCase();
 };
 
+// "What is Pervasive Computing?" matched "X is Y" with X = "What"; a question word is never a term.
+const QUESTION_TERM = new RegExp(
+  String.raw`^(?:what|why|how|who|whom|whose|which|when|where|tại sao|vì sao|thế nào|như thế nào|khi nào|ở đâu|cái gì|là gì)${LABEL_END}`,
+  "iu",
+);
+
+/** True for "What", "How …", "Tại sao …": question words that the patterns mistake for terms. */
+export const isQuestionTerm = (term) => QUESTION_TERM.test(clean(term));
+
 /** True for labels such as "Bài 5", "CLO 2", "Đối tượng" or an all-caps title. */
 export const isStructuralTerm = (term) => {
   const value = clean(term);
@@ -87,6 +96,7 @@ const scanFacts = (raw) => {
   // "Bài 5: Tế bào nhân sơ (…)" keeps the concept if the gloss is real content;
   // "Chương 3: Cấu trúc tế bào" only becomes the heading for the facts below it.
   const pushLabelled = (term, definition, sentence) => {
+    if (isQuestionTerm(term)) return;
     if (!isStructuralTerm(term)) {
       push({ term, definition, sentence });
       return;
@@ -124,6 +134,8 @@ const scanFacts = (raw) => {
       }
 
       const source = stripMarker(line);
+      // A question ("What is Pervasive Computing?") states nothing to quiz on.
+      if (/[?？]$/.test(source)) continue;
       const pair = source.match(PAIR_PATTERN);
       if (pair && !/^https?:/i.test(pair[1])) {
         pushLabelled(pair[1], pair[2], source);

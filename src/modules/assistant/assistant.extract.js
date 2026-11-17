@@ -96,7 +96,7 @@ const extractFile = async (item) => {
   if (ext === "docx") return extractDocx(item);
   if (ext === "pptx") {
     const buffer = await fetchFileBuffer(item.fileUrl);
-    return { text: extractTextFromPptxBuffer(buffer), kind: "pptx" };
+    return { text: await extractTextFromPptxBuffer(buffer), kind: "pptx" };
   }
   if (["xls", "xlsx"].includes(ext)) return extractExcel(item);
   if (["ppt", "doc"].includes(ext)) {
