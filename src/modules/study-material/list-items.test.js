@@ -95,8 +95,10 @@ describe("buildListQuestions", () => {
   const questions = buildListQuestions([SLIDES], { random: sequence([0.1, 0.5, 0.8]) });
 
   it("asks which item belongs to a group, with items of other groups as distractors", () => {
-    expect(questions).toHaveLength(12);
-    const question = questions.find((item) => item.question.includes("Disadvatanges"));
+    expect(questions.filter((item) => item.kind === "list")).toHaveLength(12);
+    const question = questions.find(
+      (item) => item.kind === "list" && item.question.includes("Disadvatanges"),
+    );
     expect(question.question).toBe('Which of these is listed under "Disadvatanges"?');
     const right = question.options[question.correctIndex];
     expect(["Internet Connectivity", "Vendor lock-in", "Limited Control", "Security"]).toContain(right);
@@ -126,7 +128,10 @@ describe("quiz and flashcards from slides with only titles and bullets", () => {
       },
     );
     expect(quiz.questions).toHaveLength(8);
-    expect(quiz.questions.every((question) => question.kind === "list")).toBe(true);
+    // Three groups: easy "listed under" and medium "NOT listed under" (no 4th group for list-group).
+    expect(new Set(quiz.questions.map((question) => question.kind))).toEqual(
+      new Set(["list", "list-not"]),
+    );
     expect(quiz.questions.every((question) => questionIsGrounded(question, facts, { sources: [SLIDES] }))).toBe(true);
     expect(quiz.questions.some((question) => "sourceKey" in question)).toBe(false);
   });
@@ -139,7 +144,7 @@ describe("quiz and flashcards from slides with only titles and bullets", () => {
     const cards = await buildFlashcardsFromFacts(
       facts,
       { numberOfCards: 5, sources: [SLIDES] },
-      { rewriteFronts: async () => new Map() },
+      { rewriteFronts: async () => new Map(), generateReasoning: async () => [] },
     );
     expect(cards.length).toBeGreaterThanOrEqual(3);
   });
@@ -155,5 +160,71 @@ describe("fixes from the Pervasive Computing slides", () => {
     const facts = extractFacts("What is Pervasive Computing?\nAlias: ubiquitous computing everywhere");
     expect(facts.map((fact) => fact.term)).toEqual(["Alias"]);
     expect(facts.some((fact) => /What is/.test(fact.sentence))).toBe(false);
+  });
+});
+
+describe("harder list questions", () => {
+  // Four groups, like the Pervasive Computing slides.
+  const NOTES = [
+    "Advantages of Mobile computing\nPortability\nData Access\nProductivity",
+    "Limits of Mobile computing\nSecurity\nConnectivity Quality\nPower",
+    "Mobile computing components\nMobile hardware\nMobile software\nMobile communication",
+    "Its Application\nHealthcare\nSmarthome\nMicropayments",
+  ].join("\n\n");
+  const questions = buildListQuestions([NOTES], { random: sequence([0.15, 0.55, 0.85]) });
+  const byKind = (kind) => questions.filter((question) => question.kind === kind);
+
+  it("asks which item is NOT in a group: three of its items and one outsider", () => {
+    const question = byKind("list-not").find((item) => item.sourceTopic === "Limits of Mobile computing");
+    expect(question.question).toBe('Which of these is NOT listed under "Limits of Mobile computing"?');
+    const limits = ["Security", "Connectivity Quality", "Power"];
+    expect(limits).not.toContain(question.options[question.correctIndex]);
+    const wrong = question.options.filter((_, index) => index !== question.correctIndex);
+    expect(wrong.every((option) => limits.includes(option))).toBe(true);
+    expect(listQuestionIsGrounded(question, [NOTES])).toBe(true);
+  });
+
+  it("asks which group an item belongs to, with four group names as options", () => {
+    const question = byKind("list-group").find((item) => item.listItem === "Smarthome");
+    expect(question.question).toBe('Which group lists "Smarthome"?');
+    expect(question.options[question.correctIndex]).toBe("Its Application");
+    expect(new Set(question.options).size).toBe(4);
+    expect(listQuestionIsGrounded(question, [NOTES])).toBe(true);
+    const tampered = { ...question, correctIndex: (question.correctIndex + 1) % 4 };
+    expect(listQuestionIsGrounded(tampered, [NOTES])).toBe(false);
+  });
+
+  it("needs four groups for the which-group question", () => {
+    expect(buildListQuestions([SLIDES]).some((question) => question.kind === "list-group")).toBe(false);
+  });
+
+  it("gives all three levels on a mixed quiz from slides alone", async () => {
+    const quiz = await buildQuizFromFacts(
+      extractFacts(NOTES),
+      { numberOfQuestions: 6, difficulty: "mixed", sources: [NOTES] },
+      {
+        random: sequence([0.3, 0.7]),
+        rewriteQuestions: async () => new Map(),
+        generateReasoning: async () => [],
+      },
+    );
+    expect(quiz.questions.map((question) => question.difficulty)).toEqual([
+      "easy",
+      "medium",
+      "hard",
+      "easy",
+      "medium",
+      "hard",
+    ]);
+    expect(quiz.questions.some((question) => "listItem" in question)).toBe(false);
+    // "listed under" and "which group" on the same item count as one question.
+    const askedItems = quiz.questions
+      .filter((question) => question.kind !== "list-not")
+      .map((question) =>
+        question.kind === "list-group"
+          ? question.question.match(/"([^"]+)"/)[1]
+          : question.options[question.correctIndex],
+      );
+    expect(new Set(askedItems).size).toBe(askedItems.length);
   });
 });

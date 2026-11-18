@@ -1,16 +1,18 @@
 import { asyncHandler } from "../../../utils/asyncHandler.js";
-import { buildSuccessResponse } from "../../../utils/response.js";
+import { respondWithProgress } from "../../../utils/progressResponse.js";
 import * as flashcardGeneratorService from "../services/flashcard-generator.service.js";
 
-export const generateDocumentFlashcards = asyncHandler(async (req, res) => {
-  const data = await flashcardGeneratorService.generateFlashcardsFromNote(
-    req.user.userId,
-    req.user.role,
-    req.params.documentId,
-    req.body,
-  );
-
-  res.status(200).json(
-    buildSuccessResponse("Flashcards drafted from your notes", data),
-  );
-});
+// Clients asking for text/event-stream also get progress events (see respondWithProgress).
+export const generateDocumentFlashcards = asyncHandler(async (req, res) =>
+  respondWithProgress(req, res, {
+    status: 200,
+    message: "Flashcards drafted from your notes",
+    run: (onProgress) =>
+      flashcardGeneratorService.generateFlashcardsFromNote(
+        req.user.userId,
+        req.user.role,
+        req.params.documentId,
+        { ...req.body, onProgress },
+      ),
+  }),
+);

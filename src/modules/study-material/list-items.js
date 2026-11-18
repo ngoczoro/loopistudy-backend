@@ -3,7 +3,9 @@
  * just a title with a short list ("Advantages" / "Back-up and restore data" / "Mobility" …),
  * which has no sentence to blank and no "term: definition" line, but does say which item
  * belongs to which group:
- *   list  "Which of these is listed under "Advantages"?"  1 item of that group + 3 of others
+ *   list        "Which of these is listed under "Advantages"?"   (easy)
+ *   list-not    "Which of these is NOT listed under "Advantages"?" (medium)
+ *   list-group  "Which group lists "Mobility"?"                    (hard, needs 4+ groups)
  */
 import { isOutlineText } from "./fact-extractor.js";
 
@@ -98,47 +100,10 @@ const groupExplanation = ({ label, items }, vietnamese) =>
     ? `Theo tài liệu, "${label}" gồm: ${items.join(", ")}.`
     : `In your notes, "${label}" lists: ${items.join(", ")}.`;
 
-/** "Which is listed under X" for every item of every group that has three outside items. */
-export const buildListQuestions = (sources, { random = Math.random } = {}) => {
-  const groups = parseListGroupsFromSources(sources);
-  const perGroup = [];
+const uniqueItems = (items) => [...new Map(items.map((item) => [normalize(item), item])).values()];
 
-  for (const group of groups) {
-    const own = new Set(group.items.map(normalize));
-    const outside = [
-      ...new Map(
-        groups
-          .filter((other) => other !== group)
-          .flatMap((other) => other.items)
-          .filter((item) => !own.has(normalize(item)))
-          .map((item) => [normalize(item), item]),
-      ).values(),
-    ];
-    if (outside.length < 3) continue;
-
-    const vietnamese = isVietnameseText(`${group.label} ${group.items.join(" ")}`);
-    const questions = [];
-    for (const item of shuffle(group.items, random)) {
-      const options = shuffle([item, ...shuffle(outside, random).slice(0, 3)], random);
-      const correctIndex = options.indexOf(item);
-      questions.push({
-        kind: "list",
-        question: vietnamese
-          ? `Mục nào sau đây thuộc "${group.label}"?`
-          : `Which of these is listed under "${group.label}"?`,
-        options,
-        correctIndex,
-        correctAnswer: LETTERS[correctIndex],
-        explanation: groupExplanation(group, vietnamese),
-        sourceTopic: group.label.slice(0, 200),
-        // One question per item: the group explanation is shared, so dedupe on this instead.
-        sourceKey: `${normalize(group.label)}|${normalize(item)}`,
-      });
-    }
-    perGroup.push(questions);
-  }
-
-  // Alternate between groups so a long list (seven advantages) does not fill the whole quiz.
+/** Alternate between groups so a long list (seven advantages) does not fill the whole quiz. */
+const interleave = (perGroup, random) => {
   const ordered = [];
   for (let round = 0; perGroup.some((questions) => round < questions.length); round += 1) {
     for (const questions of shuffle(perGroup, random)) {
@@ -148,7 +113,97 @@ export const buildListQuestions = (sources, { random = Math.random } = {}) => {
   return ordered;
 };
 
-/** The right option is in the named group; every other option is in some other group. */
+const withOptions = (correct, wrong, random) => {
+  const options = shuffle([correct, ...wrong], random);
+  const correctIndex = options.indexOf(correct);
+  return { options, correctIndex, correctAnswer: LETTERS[correctIndex] };
+};
+
+/**
+ * Three kinds of question from heading + item blocks, all checkable against the notes:
+ *   list        easy    "Which of these is listed under X?"   1 item of X + 3 from other groups
+ *   list-not    medium  "Which of these is NOT listed under X?"  3 items of X + 1 from another group
+ *   list-group  hard    "Which group lists "item"?"          4 group names (needs 4+ groups)
+ * "list" and "list-group" on the same item share a sourceKey, so a quiz asks it only once.
+ */
+export const buildListQuestions = (sources, { random = Math.random } = {}) => {
+  const groups = parseListGroupsFromSources(sources);
+  const members = [];
+  const outsiders = [];
+  const owners = [];
+  // An item listed under two groups has no single right group; leave it out of "list-group".
+  const groupsOf = (item) => groups.filter((group) => group.items.some((own) => normalize(own) === normalize(item)));
+
+  for (const group of groups) {
+    const own = new Set(group.items.map(normalize));
+    const outside = uniqueItems(
+      groups
+        .filter((other) => other !== group)
+        .flatMap((other) => other.items)
+        .filter((item) => !own.has(normalize(item))),
+    );
+    const vietnamese = isVietnameseText(`${group.label} ${group.items.join(" ")}`);
+    const explanation = groupExplanation(group, vietnamese);
+    const sourceTopic = group.label.slice(0, 200);
+
+    if (outside.length >= 3) {
+      members.push(
+        shuffle(group.items, random).map((item) => ({
+          kind: "list",
+          question: vietnamese
+            ? `Mục nào sau đây thuộc "${group.label}"?`
+            : `Which of these is listed under "${group.label}"?`,
+          ...withOptions(item, shuffle(outside, random).slice(0, 3), random),
+          explanation,
+          sourceTopic,
+          sourceKey: `${normalize(group.label)}|${normalize(item)}`,
+        })),
+      );
+    }
+
+    if (outside.length >= 1 && group.items.length >= 3) {
+      // One question per outsider, up to the group size, each with three of the group's items.
+      outsiders.push(
+        shuffle(outside, random)
+          .slice(0, group.items.length)
+          .map((outsider) => ({
+            kind: "list-not",
+            question: vietnamese
+              ? `Mục nào sau đây KHÔNG thuộc "${group.label}"?`
+              : `Which of these is NOT listed under "${group.label}"?`,
+            ...withOptions(outsider, shuffle(group.items, random).slice(0, 3), random),
+            explanation,
+            sourceTopic,
+            sourceKey: `not|${normalize(group.label)}|${normalize(outsider)}`,
+          })),
+      );
+    }
+
+    if (groups.length >= 4) {
+      const otherLabels = groups.filter((other) => other !== group).map((other) => other.label);
+      owners.push(
+        shuffle(group.items, random)
+          .filter((item) => groupsOf(item).length === 1)
+          .map((item) => ({
+            kind: "list-group",
+            question: vietnamese ? `"${item}" thuộc nhóm nào?` : `Which group lists "${item}"?`,
+            ...withOptions(group.label, shuffle(otherLabels, random).slice(0, 3), random),
+            explanation,
+            sourceTopic,
+            listItem: item,
+            sourceKey: `${normalize(group.label)}|${normalize(item)}`,
+          })),
+      );
+    }
+  }
+
+  return [...interleave(members, random), ...interleave(outsiders, random), ...interleave(owners, random)];
+};
+
+/**
+ * Checks a list / list-not / list-group question against the groups in the notes.
+ * `sourceTopic` is the group the question is about (the right answer's group for list-group).
+ */
 export const listQuestionIsGrounded = (question, sources) => {
   if (!question?.question || question.options?.length !== 4) return false;
   if (new Set(question.options.map(normalize)).size !== 4) return false;
@@ -160,11 +215,24 @@ export const listQuestionIsGrounded = (question, sources) => {
   const others = new Set(
     groups.filter((item) => item !== group).flatMap((item) => item.items.map(normalize)),
   );
-  return question.options.every((option, index) =>
-    index === question.correctIndex
-      ? own.has(normalize(option))
-      : others.has(normalize(option)) && !own.has(normalize(option)),
-  );
+  const inOwn = (option) => own.has(normalize(option));
+  const inOthersOnly = (option) => others.has(normalize(option)) && !own.has(normalize(option));
+  const isRight = (index) => index === question.correctIndex;
+
+  if (question.kind === "list-not") {
+    return question.options.every((option, index) => (isRight(index) ? inOthersOnly(option) : inOwn(option)));
+  }
+  if (question.kind === "list-group") {
+    const item = normalize(question.listItem);
+    const holders = groups.filter((candidate) => candidate.items.some((own) => normalize(own) === item));
+    if (holders.length !== 1 || holders[0] !== group) return false;
+    const labels = new Set(groups.map((candidate) => candidate.label));
+    return (
+      question.options[question.correctIndex] === group.label &&
+      question.options.every((option) => labels.has(option))
+    );
+  }
+  return question.options.every((option, index) => (isRight(index) ? inOwn(option) : inOthersOnly(option)));
 };
 
 /** One card per group: front asks what the group lists, back is the list. */

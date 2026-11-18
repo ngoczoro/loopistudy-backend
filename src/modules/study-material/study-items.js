@@ -253,26 +253,38 @@ Trả về JSON dạng {"questions":["câu hỏi","câu hỏi"]}. Số phần t�
   });
 }
 
-export const buildOptions = (correctFact, pool, random = Math.random, blocked = new Set()) => {
+/**
+ * Four options for a definition question. `preferRelated` (default) tries distractors from the
+ * same term or section first, which are hard to tell apart; false tries other sections first
+ * (an easy quiz). The question's level is then read from what was actually picked.
+ */
+export const buildOptions = (
+  correctFact,
+  pool,
+  random = Math.random,
+  blocked = new Set(),
+  preferRelated = true,
+) => {
   const correct = answerTextForFact(correctFact);
   const used = new Set([normalizeStudyText(correct)]);
   const distractorFacts = [];
   const sameTerm = normalizeStudyText(usableTerm(correctFact));
-  const ordered = [
-    ...pool.filter(
-      (fact) => fact.id !== correctFact.id && normalizeStudyText(usableTerm(fact)) === sameTerm && sameTerm,
-    ),
-    ...pool.filter(
-      (fact) =>
-        fact.id !== correctFact.id &&
-        fact.heading &&
-        fact.heading === correctFact.heading &&
-        normalizeStudyText(usableTerm(fact)) !== sameTerm,
-    ),
-    ...pool.filter(
-      (fact) => fact.id !== correctFact.id && fact.heading !== correctFact.heading,
-    ),
-  ];
+  const sameTermFacts = pool.filter(
+    (fact) => fact.id !== correctFact.id && normalizeStudyText(usableTerm(fact)) === sameTerm && sameTerm,
+  );
+  const sameSectionFacts = pool.filter(
+    (fact) =>
+      fact.id !== correctFact.id &&
+      fact.heading &&
+      fact.heading === correctFact.heading &&
+      normalizeStudyText(usableTerm(fact)) !== sameTerm,
+  );
+  const otherFacts = pool.filter(
+    (fact) => fact.id !== correctFact.id && fact.heading !== correctFact.heading,
+  );
+  const ordered = preferRelated
+    ? [...sameTermFacts, ...sameSectionFacts, ...otherFacts]
+    : [...otherFacts, ...sameSectionFacts, ...sameTermFacts];
 
   const take = (allowBlocked) => {
     for (const fact of ordered) {
@@ -307,13 +319,16 @@ export const buildOptions = (correctFact, pool, random = Math.random, blocked = 
  * A question is kept only when what it shows comes from this document.
  * "definition" (the default): the explanation and every option are facts of the note.
  * "cloze" / "statement": see sentenceQuestionIsGrounded.
- * "list": see listQuestionIsGrounded (needs the raw `sources`; facts lose list structure).
+ * "list" / "list-not" / "list-group": see listQuestionIsGrounded (needs the raw `sources`;
+ * facts lose list structure).
  */
 export const questionIsGrounded = (question, facts, { sources = [] } = {}) => {
   if (question?.kind === "cloze" || question?.kind === "statement") {
     return sentenceQuestionIsGrounded(question, facts);
   }
-  if (question?.kind === "list") return listQuestionIsGrounded(question, sources);
+  if (["list", "list-not", "list-group"].includes(question?.kind)) {
+    return listQuestionIsGrounded(question, sources);
+  }
   if (question?.kind === "reasoning") return reasoningQuestionIsGrounded(question, sources);
   if (!question?.question || question.options?.length !== 4) return false;
   const explanationKey = normalizeStudyText(question.explanation);
@@ -333,7 +348,68 @@ const stemFor = (fact, difficulty, rewritten, label) => {
   return templateQuestion(fact, difficulty, label);
 };
 
-const SENTENCE_LEVEL = { list: "easy", cloze: "medium", statement: "hard" };
+/** How hard each code-built kind is to answer, whatever level the user asked for. */
+const KIND_LEVEL = {
+  list: "easy",
+  "list-not": "medium",
+  cloze: "medium",
+  statement: "hard",
+  "list-group": "hard",
+  reasoning: "hard",
+};
+const LEVELS = ["easy", "medium", "hard"];
+// Where to look when the asked level runs out: nearest level first.
+const LEVEL_FALLBACK = {
+  easy: ["easy", "medium", "hard"],
+  medium: ["medium", "easy", "hard"],
+  hard: ["hard", "medium", "easy"],
+};
+
+/**
+ * Pick questions by their real level. A single level takes that level first and tops up from
+ * the nearest ones; "mixed" alternates easy, medium, hard. Kinds stay mixed inside a level,
+ * a note sentence is asked about once, and earlier stems in `avoid` are skipped.
+ */
+const pickByDifficulty = (lists, mode, limit, avoid) => {
+  const byLevel = Object.fromEntries(
+    LEVELS.map((level) => [
+      level,
+      mixQuestionKinds(
+        lists.map((list) => list.filter((question) => question.difficulty === level)),
+        Infinity,
+        avoid,
+      ),
+    ]),
+  );
+  const picked = [];
+  const usedSources = new Set();
+  const takeFrom = (level) => {
+    const queue = byLevel[level];
+    while (queue.length) {
+      const question = queue.shift();
+      const source = question.sourceKey ?? normalizeStudyText(question.explanation);
+      if (usedSources.has(source)) continue;
+      usedSources.add(source);
+      picked.push(question);
+      return true;
+    }
+    return false;
+  };
+
+  if (mode === "mixed") {
+    while (picked.length < limit && LEVELS.some((level) => byLevel[level].length)) {
+      for (const level of LEVELS) {
+        if (picked.length >= limit) break;
+        takeFrom(level);
+      }
+    }
+  } else {
+    for (const level of LEVEL_FALLBACK[mode]) {
+      while (picked.length < limit && takeFrom(level));
+    }
+  }
+  return picked;
+};
 
 /**
  * Take questions round-robin across kinds (definition, cloze, statement) so one quiz mixes them.
@@ -367,6 +443,9 @@ const mixQuestionKinds = (lists, limit, avoid) => {
  *   reasoning  "why / what if / how do A and B differ", written by Ollama (OpenAI fallback) from a
  *              note paragraph and checked against a quoted evidence sentence (reasoning-items.js)
  * `sources` are the raw note texts; slides with only titles and bullets need them.
+ * Each question carries its real level (list easy; list-not, cloze medium; statement, list-group,
+ * reasoning hard; definition from its distractors). `difficulty` easy | medium | hard takes that level first and
+ * tops up from the nearest; "mixed" alternates the three (see pickByDifficulty).
  * `rewriteQuestions` and `generateReasoning` are injectable so tests do not call a model.
  */
 export const buildQuizFromFacts = async (
@@ -382,21 +461,16 @@ export const buildQuizFromFacts = async (
     rewriteQuestions = rewriteQuestionsWithOllama,
     generateReasoning = buildReasoningQuestions,
     random = Math.random,
+    onProgress = () => {},
   } = {},
 ) => {
-  // At most a couple per quiz: each one is a model call (~15-30 s on a CPU-only machine).
-  const reasoning = await generateReasoning({
-    sources,
-    facts,
-    limit: Math.min(2, Math.ceil(numberOfQuestions / 3)),
-    difficulty: ["easy", "medium", "hard"].includes(difficulty) ? difficulty : "hard",
-  });
-
+  const mode = LEVELS.includes(difficulty) ? difficulty : "mixed";
   const counts = termCounts(facts);
   const labeled = facts.filter(
     (fact) => labelForFact(fact, counts) && substantiveAnswer(fact),
   );
   const sentenceQuestions = buildSentenceQuestions(facts, { random });
+  const listQuestions = buildListQuestions(sources, { random });
   // Definition questions need four labeled facts (one answer, three distractors). The old
   // fallback used unlabeled lines and asked "which line is from your notes?" with four lines
   // that all were: no wrong answer. Too few facts now means fewer questions, never that.
@@ -409,63 +483,126 @@ export const buildQuizFromFacts = async (
     return !avoid.has(easyStem);
   }).slice(0, count);
 
+  const buildDefinitions = (rewritten) => {
+    const definitions = [];
+    const usedDistractors = new Set();
+    for (const fact of targets) {
+      const label = labelForFact(fact, counts);
+      const built = buildOptions(fact, pool, random, usedDistractors, mode !== "easy");
+      if (!built) continue;
+      // The real level from the distractors picked, not the level the user asked for.
+      const level = difficultyFromDistractors("mixed", fact, built.distractorFacts);
+      for (const distractor of built.distractorFacts) {
+        usedDistractors.add(normalizeStudyText(answerTextForFact(distractor)));
+      }
+      const { distractorFacts, ...stored } = built;
+      const proposed = rewritten.get(fact.id);
+      const question = {
+        kind: "definition",
+        question: stemFor(fact, level, rewritten, label),
+        difficulty: level,
+        ...stored,
+      };
+      question.modelWorded = Boolean(proposed && question.question === proposed);
+      if (questionIsGrounded(question, facts)) definitions.push(question);
+    }
+    return definitions;
+  };
+  const grounded = (list) =>
+    list
+      .filter((question) => questionIsGrounded(question, facts, { sources }))
+      .map((question) => ({ ...question, difficulty: KIND_LEVEL[question.kind] }));
+
+  // "Why / what if" questions are hard and cost a model call each (~15-30 s on a CPU-only
+  // machine). Easy never asks for them; medium only when its own and easy questions run short,
+  // since it would not reach the hard ones otherwise; hard and mixed always try.
+  const notHardCount = () => {
+    const askedLines = new Set();
+    for (const question of [
+      ...buildDefinitions(new Map()),
+      ...grounded([...sentenceQuestions.cloze, ...listQuestions]),
+    ]) {
+      if (question.difficulty === "hard" || avoid.has(normalizeStudyText(question.question))) continue;
+      askedLines.add(question.sourceKey ?? normalizeStudyText(question.explanation));
+    }
+    return askedLines.size;
+  };
+  // Progress: how many questions code already has (one per note line), before any model call.
+  const preparedCount = () => {
+    const lines = new Set(targets.map((fact) => normalizeStudyText(fact.sentence)));
+    for (const question of grounded([
+      ...sentenceQuestions.cloze,
+      ...sentenceQuestions.statement,
+      ...listQuestions,
+    ])) {
+      if (avoid.has(normalizeStudyText(question.question))) continue;
+      lines.add(question.sourceKey ?? normalizeStudyText(question.explanation));
+    }
+    return Math.min(numberOfQuestions, lines.size);
+  };
+
+  const wantsReasoning =
+    mode === "hard" || mode === "mixed" || (mode === "medium" && notHardCount() < numberOfQuestions);
+  const reasoningLimit = wantsReasoning ? Math.min(2, Math.ceil(numberOfQuestions / 3)) : 0;
+  // "ready" counts the questions the quiz has so far. Slots left for the model are not ready yet,
+  // so the count keeps rising while it writes them (3/5, then 4/5…) instead of starting full.
+  const codeReady = Math.min(preparedCount(), numberOfQuestions - reasoningLimit);
+  const progress = { ready: codeReady, total: numberOfQuestions };
+  onProgress({ stage: "prepared", ...progress });
+
+  const reasoning = wantsReasoning
+    ? await generateReasoning({
+        sources,
+        facts,
+        limit: reasoningLimit,
+        difficulty: KIND_LEVEL.reasoning,
+        onAttempt: ({ made, limit }) =>
+          onProgress({
+            stage: "ai",
+            current: made + 1,
+            limit,
+            ready: codeReady + made,
+            total: numberOfQuestions,
+          }),
+      })
+    : [];
+
   let rewritten = new Map();
   try {
     // Rewording only polishes "X là gì?" stems; skip that extra model call when one already ran.
-    if (targets.length && !reasoning.length) rewritten = await rewriteQuestions(
-      targets.map((fact, index) => ({
-        fact,
-        label: labelForFact(fact, counts),
-        difficulty: levelAt(index, targets.length, difficulty),
-      })),
-    );
+    if (targets.length && !reasoning.length) {
+      onProgress({ stage: "wording", ...progress });
+      rewritten = await rewriteQuestions(
+        targets.map((fact, index) => ({
+          fact,
+          label: labelForFact(fact, counts),
+          difficulty: levelAt(index, targets.length, difficulty),
+        })),
+      );
+    }
   } catch (error) {
     console.warn("Study quiz wording fell back to templates:", error.message);
   }
 
-  const definitions = [];
-  const usedDistractors = new Set();
-  for (let index = 0; index < targets.length; index += 1) {
-    const fact = targets[index];
-    const label = labelForFact(fact, counts);
-    const built = buildOptions(fact, pool, random, usedDistractors);
-    if (!built) continue;
-    const level = difficultyFromDistractors(difficulty, fact, built.distractorFacts);
-    for (const distractor of built.distractorFacts) {
-      usedDistractors.add(normalizeStudyText(answerTextForFact(distractor)));
-    }
-    const { distractorFacts, ...stored } = built;
-    const proposed = rewritten.get(fact.id);
-    const question = {
-      kind: "definition",
-      question: stemFor(fact, level, rewritten, label),
-      difficulty: level,
-      ...stored,
-    };
-    question.modelWorded = Boolean(proposed && question.question === proposed);
-    if (questionIsGrounded(question, facts)) definitions.push(question);
-  }
-
-  const sentenceLevel = (kind) =>
-    ["easy", "medium", "hard"].includes(difficulty) ? difficulty : SENTENCE_LEVEL[kind];
-  const groundedSentence = (list) =>
-    list
-      .filter((question) => questionIsGrounded(question, facts, { sources }))
-      .map((question) => ({ ...question, difficulty: sentenceLevel(question.kind) }));
-  const mixed = mixQuestionKinds(
+  const definitions = buildDefinitions(rewritten);
+  const mixed = pickByDifficulty(
     [
-      reasoning.filter((question) => questionIsGrounded(question, facts, { sources })),
+      grounded(reasoning),
       definitions,
-      groundedSentence(sentenceQuestions.cloze),
-      groundedSentence(sentenceQuestions.statement),
-      groundedSentence(buildListQuestions(sources, { random })),
+      grounded(sentenceQuestions.cloze),
+      grounded(sentenceQuestions.statement),
+      grounded(listQuestions),
     ],
+    mode,
     numberOfQuestions,
     avoid,
   );
   const usedModelWording = mixed.some((question) => question.modelWorded);
   const modelWritten = mixed.find((question) => question.kind === "reasoning");
-  const questions = mixed.map(({ modelWorded, sourceKey, provider, model, ...question }) => question);
+  // Drop fields only used while building (listItem: the item a "list-group" question asks about).
+  const questions = mixed.map(
+    ({ modelWorded, sourceKey, provider, model, listItem, ...question }) => question,
+  );
 
   let model = "study-facts";
   if (modelWritten) model = `${modelWritten.provider}:${modelWritten.model}`;
@@ -523,50 +660,123 @@ export const cardIsGrounded = (card, fact) => {
   );
 };
 
+/** Card back for a reasoning question: the answer plus the note sentence that backs it. */
+const reasoningBack = (question) => {
+  const answer = question.options[question.correctIndex];
+  const vietnamese = /[ăâêôơưđáàảãạắằấầéèẹẻẽíìịỉĩóòọỏõúùụủũýỳỵỷỹ]/i.test(question.question);
+  return `${answer} (${vietnamese ? "Ghi chú" : "Notes"}: "${question.explanation}")`;
+};
+
+/** Round-robin across card kinds so one deck mixes them; a front is used once. */
+const mixCardKinds = (lists, limit) => {
+  const cards = [];
+  const seenFronts = new Set();
+  const queues = lists.map((list) => [...list]);
+  while (cards.length < limit && queues.some((queue) => queue.length)) {
+    for (const queue of queues) {
+      if (cards.length >= limit) break;
+      while (queue.length) {
+        const card = queue.shift();
+        const key = normalizeStudyText(card.front);
+        if (seenFronts.has(key)) continue;
+        seenFronts.add(key);
+        cards.push(card);
+        break;
+      }
+    }
+  }
+  return cards;
+};
+
 /**
- * Definition cards for labeled facts ("X là gì?" / definition), topped up with cloze cards
- * ("___ cho phép…" / term) when the note has few "term: definition" lines.
+ * Same pipeline as the quiz, as front/back cards:
+ *   reasoning   "Vì sao…?" / "Điều gì xảy ra nếu…?" from Ollama (OpenAI fallback), checked against
+ *               a quoted note sentence; back = answer + that quote (reasoning-items.js)
+ *   definition  "X là gì?" / definition (front wording tries Ollama, then a template)
+ *   cloze       "___ cho phép…" / term (sentence-items.js)
+ *   list        "What is listed under X?" / the items (list-items.js)
+ * Kinds are mixed round-robin. `rewriteFronts` and `generateReasoning` are injectable for tests.
+ * Returns { cards, model }: `model` names what wrote the deck, like a quiz's aiModel
+ * ("ollama:qwen2.5:3b", "openai:gpt-4.1-mini", or "study-facts" when no model was used).
  */
-export const buildFlashcardsFromFacts = async (
+export const buildFlashcardDeck = async (
   facts,
   { numberOfCards = 5, sources = [] } = {},
-  { rewriteFronts = rewriteCardFrontsWithOllama, random = Math.random } = {},
+  {
+    rewriteFronts = rewriteCardFrontsWithOllama,
+    generateReasoning = buildReasoningQuestions,
+    random = Math.random,
+    onProgress = () => {},
+  } = {},
 ) => {
   const counts = termCounts(facts);
   // Same bar as quiz definitions: a title line like "Java — Practice Problems" is not a card.
   const labeled = facts
     .filter((fact) => labelForFact(fact, counts) && substantiveAnswer(fact))
     .slice(0, numberOfCards);
-  // Cloze cards first (they test recall of a term), then one card per bullet list.
-  const clozeCards = [...buildClozeCards(facts, { random }), ...buildListCards(sources)];
+  const clozeCards = buildClozeCards(facts, { random });
+  const listCards = buildListCards(sources);
+  // At most a couple per deck: each one is a model call (~15-30 s on a CPU-only machine).
+  const reasoningLimit = Math.min(2, Math.ceil(numberOfCards / 3));
+  // "ready" counts cards the deck has so far; slots left for the model fill in as it writes them.
+  const codeReady = Math.min(
+    labeled.length + clozeCards.length + listCards.length,
+    numberOfCards - reasoningLimit,
+  );
+  const progress = { ready: codeReady, total: numberOfCards };
+  onProgress({ stage: "prepared", ...progress });
+
+  const reasoning = await generateReasoning({
+    sources,
+    facts,
+    limit: reasoningLimit,
+    onAttempt: ({ made, limit }) =>
+      onProgress({ stage: "ai", current: made + 1, limit, ready: codeReady + made, total: numberOfCards }),
+  });
+  const reasoningCards = reasoning
+    .filter((question) => reasoningQuestionIsGrounded(question, sources))
+    .map((question) => ({
+      front: question.question,
+      back: reasoningBack(question),
+      via: `${question.provider}:${question.model}`,
+    }));
+
+  const hasOtherCards = reasoningCards.length || clozeCards.length || listCards.length;
   // Unlabeled lines only become cards ("what does this part say?") when nothing better exists.
-  const chosen = labeled.length || clozeCards.length ? labeled : facts.slice(0, numberOfCards);
+  const chosen = labeled.length || hasOtherCards ? labeled : facts.slice(0, numberOfCards);
+
   let fronts = new Map();
   try {
-    if (chosen.length) fronts = await rewriteFronts(chosen);
+    // Rewording only polishes "X là gì?" fronts; skip that extra model call when one already ran.
+    if (chosen.length && !reasoningCards.length) {
+      onProgress({ stage: "wording", ...progress });
+      fronts = await rewriteFronts(chosen);
+    }
   } catch (error) {
     console.warn("Study flashcard wording fell back to templates:", error.message);
   }
 
-  const cards = [];
+  const definitionCards = [];
   for (const fact of chosen) {
     const back = answerTextForFact(fact);
     const label = labelForFact(fact, counts);
-    let front = fronts.get(fact.id) || templateFront(fact, label);
+    const proposed = fronts.get(fact.id);
+    let front = proposed || templateFront(fact, label);
     if (!stemFits(front, fact, label)) {
       front = templateFront(fact, label);
     }
     const card = { front, back };
-    if (cardIsGrounded(card, fact)) cards.push(card);
+    if (proposed && front === proposed) {
+      card.via = `${fronts.wordingProvider || "ollama"}:${fronts.wordingModel || ollamaModelName()}`;
+    }
+    if (cardIsGrounded(card, fact)) definitionCards.push(card);
   }
 
-  const seenFronts = new Set(cards.map((card) => normalizeStudyText(card.front)));
-  for (const card of clozeCards) {
-    if (cards.length >= numberOfCards) break;
-    if (seenFronts.has(normalizeStudyText(card.front))) continue;
-    seenFronts.add(normalizeStudyText(card.front));
-    cards.push(card);
-  }
-
-  return cards;
+  const mixed = mixCardKinds([reasoningCards, definitionCards, clozeCards, listCards], numberOfCards);
+  // A model-written card that made it into the deck names the deck's model.
+  const model = mixed.find((card) => card.via)?.via ?? "study-facts";
+  return { cards: mixed.map(({ via, ...card }) => card), model };
 };
+
+/** Just the cards (see buildFlashcardDeck). */
+export const buildFlashcardsFromFacts = async (...args) => (await buildFlashcardDeck(...args)).cards;

@@ -189,6 +189,25 @@ const overlap = (option, evidence) => {
   return [...words].filter((word) => evidenceWords.has(word)).length / words.size;
 };
 
+// Words that only frame a question; the rest of the question must come from the paragraph.
+const QUESTION_WORDS = new Set(
+  "sao tai gi nao diem khac giong nhau sanh xay ra neu dieu nhu the nao ai dau bao nhieu what why how which when where who does do differ difference compare happens happen if between".split(
+    " ",
+  ),
+);
+const QUESTION_GROUNDING = 0.85;
+
+/**
+ * Share of the question's own words (not "vì sao", "khác", "điểm nào"…) found in the paragraph.
+ * "OOP khác lập trình THỦ TỤC ở điểm nào?" on a note that never mentions it scores low.
+ */
+const questionGrounding = (question, passage) => {
+  const words = [...tokens(question)].filter((word) => !QUESTION_WORDS.has(word));
+  if (!words.length) return 0;
+  const passageWords = tokens(passage);
+  return words.filter((word) => passageWords.has(word)).length / words.length;
+};
+
 // "không", "chỉ"… are stopwords, so "lớp con KHÔNG THỂ thay đổi…" would look like the evidence.
 const NEGATION = /\b(khong|chang|chua|chi|not|never|no|only|cannot)\b/;
 /** Word overlap with the evidence, halved when the option negates or limits what it says. */
@@ -244,6 +263,8 @@ export const checkReasoningAnswer = (json, passage) => {
 
   const correct = options[correctIndex];
   if (question.toLowerCase().includes(correct.toLowerCase())) return null;
+  // The question itself must not bring in something the paragraph never mentions.
+  if (questionGrounding(question, passage) < QUESTION_GROUNDING) return null;
   const backing = support(correct, evidence);
   const bestWrong = Math.max(
     ...options.filter((_, index) => index !== correctIndex).map((option) => support(option, evidence)),
@@ -283,6 +304,7 @@ const askModels = async (type, passage) => {
 /**
  * Up to `limit` checked reasoning questions from the notes, within a time budget.
  * `ask(type, passage)` is injectable so tests do not call a model.
+ * `onAttempt({ made, limit })` runs before each model call, for progress reporting.
  */
 export const buildReasoningQuestions = async ({
   sources = [],
@@ -291,6 +313,7 @@ export const buildReasoningQuestions = async ({
   difficulty = "hard",
   ask = askModels,
   now = Date.now,
+  onAttempt = () => {},
 } = {}) => {
   if (!reasoningEnabled() || limit <= 0) return [];
   const started = now();
@@ -301,6 +324,7 @@ export const buildReasoningQuestions = async ({
     const type = reasoningTypeFor(passage);
     if (!type) continue;
     try {
+      onAttempt({ made: questions.length, limit });
       const { json, provider, model } = await ask(type, passage);
       const checked = checkReasoningAnswer(json, passage);
       if (!checked) continue;

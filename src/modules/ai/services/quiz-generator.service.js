@@ -142,6 +142,7 @@ const generateAndSaveQuiz = async ({
   forceRegenerate,
   cacheLookup,
   avoidLookup,
+  onProgress = () => {},
 }) => {
   if (!forceRegenerate && cacheLookup) {
     const existing = await quizGeneratorRepository.findExistingAiQuiz(cacheLookup);
@@ -162,7 +163,7 @@ const generateAndSaveQuiz = async ({
     title,
     avoidQuestions,
     sources: documentTexts,
-  });
+  }, { onProgress });
 
   if (!normalized.questions.length) throw notEnoughFactsError(documentTexts);
 
@@ -187,12 +188,14 @@ export const generateQuizFromDocument = async (
 ) => {
   const { difficulty, numberOfQuestions, forceRegenerate } =
     resolveGenerationOptions(options);
+  options.onProgress?.({ stage: "reading" });
 
   const content = await resolveAccessibleContent(userId, role, documentId);
   const subjectId = resolveSubjectIdFromContent(content);
   const documentText = await extractDocumentText(content);
 
   return generateAndSaveQuiz({
+    onProgress: options.onProgress,
     userId,
     subjectId,
     sourceDocumentId: documentId,
@@ -221,6 +224,7 @@ export const generateQuizFromSubject = async (
 ) => {
   const { difficulty, numberOfQuestions, forceRegenerate } =
     resolveGenerationOptions(options);
+  options.onProgress?.({ stage: "reading" });
 
   const subject = await getSubjectById(userId, subjectId);
   const items = await contentRepository.findBySubjectId(userId, subjectId);
@@ -244,6 +248,7 @@ export const generateQuizFromSubject = async (
   }
 
   return generateAndSaveQuiz({
+    onProgress: options.onProgress,
     userId,
     subjectId,
     facts,
@@ -259,6 +264,7 @@ export const generateQuizFromSubject = async (
 export const generatePracticeQuiz = async (userId, options = {}) => {
   const { difficulty, numberOfQuestions, forceRegenerate } =
     resolveGenerationOptions(options);
+  options.onProgress?.({ stage: "reading" });
   const topic = String(options.topic ?? "").trim();
 
   if (!topic) {
@@ -291,6 +297,7 @@ export const generatePracticeQuiz = async (userId, options = {}) => {
   }
 
   return generateAndSaveQuiz({
+    onProgress: options.onProgress,
     userId,
     subjectId,
     facts,

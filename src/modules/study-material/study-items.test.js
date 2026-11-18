@@ -38,9 +38,11 @@ describe("extractFacts", () => {
 describe("buildQuizFromFacts", () => {
   it("keeps only questions whose answers are other facts from the note", async () => {
     const facts = extractFacts(NOTE);
+    // Hard puts these definition questions (related distractors) first; on "mixed" a cloze on
+    // the same note line can take the line first, since each line is asked about once.
     const quiz = await buildQuizFromFacts(
       facts,
-      { numberOfQuestions: 4, difficulty: "mixed", title: "Databases" },
+      { numberOfQuestions: 4, difficulty: "hard", title: "Databases" },
       {
         random: () => 0,
         rewriteQuestions: async (targets) =>
@@ -55,15 +57,17 @@ describe("buildQuizFromFacts", () => {
 
     expect(quiz.questions).toHaveLength(4);
     expect(quiz.questions.every((question) => questionIsGrounded(question, facts))).toBe(true);
+    expect(quiz.questions[0].kind).toBe("definition");
     expect(quiz.questions[0].question).toContain("Why does a schema need");
     expect(quiz.model).toContain("ollama:");
   });
 
   it("uses a template stem when local wording is unavailable", async () => {
     const facts = extractFacts(NOTE);
+    // All facts share one section, so definition distractors are related: a hard question.
     const quiz = await buildQuizFromFacts(
       facts,
-      { numberOfQuestions: 2, difficulty: "easy", title: "Databases" },
+      { numberOfQuestions: 2, difficulty: "hard", title: "Databases" },
       {
         random: () => 0,
         rewriteQuestions: async () => {
@@ -73,7 +77,9 @@ describe("buildQuizFromFacts", () => {
     );
 
     expect(quiz.model).toBe("study-facts");
-    expect(quiz.questions[0].question).toMatch(/Which statement defines/);
+    expect(quiz.questions[0].kind).toBe("definition");
+    expect(quiz.questions[0].difficulty).toBe("hard");
+    expect(quiz.questions[0].question).toMatch(/Which statement is the right account of/);
     expect(quiz.questions.every((question) => questionIsGrounded(question, facts))).toBe(true);
   });
 
@@ -85,7 +91,7 @@ describe("buildQuizFromFacts", () => {
 
     const quiz = await buildQuizFromFacts(
       facts,
-      { numberOfQuestions: 2, difficulty: "easy", title: "Databases" },
+      { numberOfQuestions: 2, difficulty: "hard", title: "Databases" },
       { random: () => 0, rewriteQuestions: async () => rewritten },
     );
 

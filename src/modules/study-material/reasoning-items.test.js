@@ -8,7 +8,12 @@ import {
   reasoningQuestionIsGrounded,
   reasoningTypeFor,
 } from "./reasoning-items.js";
-import { buildQuizFromFacts, questionIsGrounded } from "./study-items.js";
+import {
+  buildFlashcardDeck,
+  buildFlashcardsFromFacts,
+  buildQuizFromFacts,
+  questionIsGrounded,
+} from "./study-items.js";
 import { extractFacts } from "./fact-extractor.js";
 
 const NOTE = `# Lập trình hướng đối tượng
@@ -103,6 +108,23 @@ describe("checkReasoningAnswer", () => {
     expect(checkReasoningAnswer(answer, passage)).not.toBeNull();
   });
 
+  it("rejects a question about something the paragraph never mentions", () => {
+    const passage =
+      "Lập trình hướng đối tượng là phương pháp tổ chức chương trình dựa trên các đối tượng (Object). Mỗi đối tượng bao gồm dữ liệu và các phương thức xử lý dữ liệu đó.";
+    const answer = {
+      question: "Lập trình hướng đối tượng khác lập trình thủ tục ở điểm nào?",
+      options: [
+        "Lập trình hướng đối tượng dựa trên các đối tượng, còn lập trình thủ tục dựa trên các hàm",
+        "Lập trình hướng đối tượng không dùng dữ liệu",
+        "Lập trình thủ tục dựa trên các đối tượng",
+        "Hai cách giống hệt nhau",
+      ],
+      correctIndex: 0,
+      evidence: "Lập trình hướng đối tượng là phương pháp tổ chức chương trình dựa trên các đối tượng (Object).",
+    };
+    expect(checkReasoningAnswer(answer, passage)).toBeNull();
+  });
+
   it("rejects evidence the paragraph does not contain", () => {
     expect(
       checkReasoningAnswer({ ...goodAnswer, evidence: "Đóng gói giúp chương trình chạy nhanh gấp đôi." }, PARAGRAPH),
@@ -194,5 +216,101 @@ describe("quiz with a reasoning question", () => {
     expect(quiz.model).toBe("ollama:qwen2.5:3b");
     expect(reworded).toBe(false);
     expect(questionIsGrounded(quiz.questions[0], facts, { sources: [NOTE] })).toBe(true);
+  });
+});
+
+describe("flashcards with a reasoning card", () => {
+  const reasoningQuestion = {
+    kind: "reasoning",
+    question: goodAnswer.question,
+    options: goodAnswer.options,
+    correctIndex: 0,
+    correctAnswer: "A",
+    explanation: goodAnswer.evidence,
+    sourceTopic: "why",
+    difficulty: "hard",
+    sourceKey: "reasoning|x",
+    provider: "ollama",
+    model: "qwen2.5:3b",
+  };
+
+  it("puts the reasoning card first with the answer and its quote on the back", async () => {
+    const facts = extractFacts(NOTE);
+    let reworded = false;
+    const cards = await buildFlashcardsFromFacts(
+      facts,
+      { numberOfCards: 3, sources: [NOTE] },
+      {
+        rewriteFronts: async () => {
+          reworded = true;
+          return new Map();
+        },
+        generateReasoning: async () => [reasoningQuestion],
+      },
+    );
+    expect(cards[0]).toEqual({
+      front: "Vì sao đóng gói giúp chương trình an toàn hơn?",
+      back: 'Vì dữ liệu không bị thay đổi ngoài ý muốn (Ghi chú: "Nhờ đó dữ liệu không bị thay đổi ngoài ý muốn và chương trình an toàn hơn.")',
+    });
+    expect(reworded).toBe(false);
+  });
+
+  it("drops a reasoning card whose quote is not in the notes", async () => {
+    const cards = await buildFlashcardsFromFacts(
+      extractFacts(NOTE),
+      { numberOfCards: 3, sources: [NOTE] },
+      {
+        rewriteFronts: async () => new Map(),
+        generateReasoning: async () => [{ ...reasoningQuestion, explanation: "Câu này không có trong ghi chú của bạn." }],
+      },
+    );
+    expect(cards.some((card) => card.front === reasoningQuestion.question)).toBe(false);
+  });
+});
+
+describe("flashcard deck model", () => {
+  const facts = extractFacts(NOTE);
+  const reasoningCard = {
+    kind: "reasoning",
+    question: goodAnswer.question,
+    options: goodAnswer.options,
+    correctIndex: 0,
+    explanation: goodAnswer.evidence,
+    provider: "ollama",
+    model: "qwen2.5:3b",
+  };
+
+  it("names the model that wrote a card in the deck", async () => {
+    const deck = await buildFlashcardDeck(
+      facts,
+      { numberOfCards: 3, sources: [NOTE] },
+      { rewriteFronts: async () => new Map(), generateReasoning: async () => [reasoningCard] },
+    );
+    expect(deck.model).toBe("ollama:qwen2.5:3b");
+    expect(deck.cards.some((card) => "via" in card)).toBe(false);
+  });
+
+  it("names OpenAI when it reworded a kept front", async () => {
+    const DB_NOTE = "Foreign key: a key that points at a row in another table.\nPrimary key: a key that identifies one row in a table.";
+    const dbFacts = extractFacts(DB_NOTE);
+    const fronts = new Map([["f1", "When would you use a Foreign key?"]]);
+    fronts.wordingProvider = "openai";
+    fronts.wordingModel = "gpt-4.1-mini";
+    const deck = await buildFlashcardDeck(
+      dbFacts,
+      { numberOfCards: 2 },
+      { rewriteFronts: async () => fronts, generateReasoning: async () => [] },
+    );
+    expect(deck.cards[0].front).toBe("When would you use a Foreign key?");
+    expect(deck.model).toBe("openai:gpt-4.1-mini");
+  });
+
+  it("says study-facts when no model wrote any card", async () => {
+    const deck = await buildFlashcardDeck(
+      facts,
+      { numberOfCards: 3, sources: [NOTE] },
+      { rewriteFronts: async () => new Map(), generateReasoning: async () => [] },
+    );
+    expect(deck.model).toBe("study-facts");
   });
 });
