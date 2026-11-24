@@ -13,12 +13,18 @@ import {
   FLASHCARD_IMAGE_DIR,
   PRONUNCIATION_DIR,
 } from "./modules/flashcards/flashcard.paths.js";
+import {
+  createLivekitWebhookHandler,
+  LIVEKIT_WEBHOOK_PATH,
+} from "./modules/calls/index.js";
 
 const app = express();
 
 app.use(corsMiddleware);
 app.use("/media/flashcards", express.static(FLASHCARD_IMAGE_DIR, { maxAge: "7d" }));
 app.use("/media/pronunciations", express.static(PRONUNCIATION_DIR, { maxAge: "30d" }));
+// Needs the raw body to check LiveKit's signature, so it runs before express.json().
+app.post(LIVEKIT_WEBHOOK_PATH, ...createLivekitWebhookHandler());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(generalLimiter);
