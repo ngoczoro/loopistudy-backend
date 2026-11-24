@@ -30,12 +30,27 @@ export const serializeParticipant = (participant) => {
   };
 };
 
-export const buildCallStatus = (groupId, participants = []) => {
-  const list = activeParticipants(participants).map(serializeParticipant);
+/** The same person can briefly show on two servers while switching; keep one entry. */
+const uniqueByIdentity = (participants) => {
+  const seen = new Set();
+  return participants.filter((participant) => {
+    if (seen.has(participant.identity)) return false;
+    seen.add(participant.identity);
+    return true;
+  });
+};
+
+/**
+ * `meet` is the Google Meet the group moved to, or null:
+ * `{ url, startedBy: { userId, fullName } | null, startedAt }`.
+ */
+export const buildCallStatus = (groupId, participants = [], meet = null) => {
+  const list = uniqueByIdentity(activeParticipants(participants)).map(serializeParticipant);
   return {
     groupId,
     active: list.length > 0,
     count: list.length,
     participants: list,
+    meet,
   };
 };

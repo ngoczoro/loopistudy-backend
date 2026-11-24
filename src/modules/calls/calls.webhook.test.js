@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
+import sequelize from "../../config/database.js";
 import { signWebhook, TEST_LIVEKIT_ENV as KEYS } from "./calls.testUtils.js";
 import { LIVEKIT_WEBHOOK_PATH } from "./calls.webhook.js";
 
 const GROUP_ID = "6f1c2d3e-4b5a-4c6d-8e7f-901234567890";
+
+// The webhook reads the group's Meet from the database; close the pool so Jest can exit.
+afterAll(async () => {
+  await sequelize.close().catch(() => {});
+});
 
 /**
  * Runs against the real app so it also proves the webhook is mounted before

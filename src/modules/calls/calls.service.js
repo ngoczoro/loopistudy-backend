@@ -1,19 +1,40 @@
 import ApiError from "../../utils/ApiError.js";
 import { emitToRoom, groupRoom } from "../../shared/realtime/socket.js";
 import { getMembershipOrThrow } from "../groups/groups.access.js";
+import { sendMessage } from "../groups/messages.service.js";
 import { findUserById } from "../users/user.repository.js";
 import { readCallsConfig } from "./calls.config.js";
 import { getLivekitClient } from "./calls.livekit.js";
+import { getGoogleMeetClient, normalizeMeetUrl } from "./calls.meet.js";
+import * as callsRepository from "./calls.repository.js";
 import {
+  CALL_ERROR,
   CALL_STATUS_EVENT,
   CALL_WEBHOOK_EVENTS,
+  MEET_ACTIVE_TTL_MS,
+  MEET_CREATE_COOLDOWN_MS,
   groupIdFromRoomName,
   roomNameForGroup,
 } from "./calls.constants.js";
 import { activeParticipants, buildCallStatus } from "./calls.serializer.js";
 
+/** An ApiError with a machine-readable `code` and optional `details` for the client. */
+const callError = (statusCode, message, code, details) => {
+  const error = new ApiError(statusCode, message);
+  error.code = code;
+  if (details) error.details = details;
+  return error;
+};
+
 /**
- * Group video calls on LiveKit. Dependencies are injectable for tests.
+ * Group video calls with automatic fallbacks:
+ *
+ *   1. main LiveKit server   2. fallback LiveKit server (e.g. LiveKit Cloud)
+ *   3. Google Meet: created through the Meet API, else the group's standing link,
+ *      else a link a member pastes.
+ *
+ * A group already in a call stays on the server it is on, so it is never split.
+ * Dependencies are injectable for tests.
  */
 export const createCallsService = ({
   getConfig = readCallsConfig,
@@ -21,109 +42,312 @@ export const createCallsService = ({
   getMembership = getMembershipOrThrow,
   findUser = findUserById,
   emit = emitToRoom,
+  meetStore = callsRepository,
+  getMeetClient = getGoogleMeetClient,
+  postChatMessage = (userId, groupId, content) => sendMessage(userId, groupId, { content }),
+  now = () => Date.now(),
   logger = console,
 } = {}) => {
-  const requireLivekit = () => {
-    const config = getConfig();
-    if (!config.configured) throw new ApiError(503, "Video call chưa được cấu hình.");
-    return { config, client: getClient(config) };
-  };
+  const lastMeetCreatedAt = new Map();
 
-  const callLivekit = async (operation) => {
+  // ---------- Google Meet state ----------
+
+  const readMeetRow = async (groupId) => {
     try {
-      return await operation();
+      return await meetStore.findGroupMeet(groupId);
     } catch (error) {
-      if (error instanceof ApiError) throw error;
-      logger.error?.("[calls] LiveKit request failed:", error?.message ?? error);
-      throw new ApiError(502, "Không kết nối được máy chủ gọi video.");
+      logger.error?.("[calls] Could not read the group's Meet:", error?.message ?? error);
+      return null;
     }
   };
+
+  const activeMeetView = async (row) => {
+    if (!row?.activeMeetUrl || !row.activeMeetAt) return null;
+    const startedAt = new Date(row.activeMeetAt);
+    if (now() - startedAt.getTime() > MEET_ACTIVE_TTL_MS) return null;
+    const user = row.activeMeetBy ? await findUser(row.activeMeetBy).catch(() => null) : null;
+    return {
+      url: row.activeMeetUrl,
+      startedBy: user ? { userId: String(user.id), fullName: user.fullName || "Member" } : null,
+      startedAt: startedAt.toISOString(),
+    };
+  };
+
+  /** What the client can fall back to when Loopi calls are unavailable. */
+  const meetFallback = async (groupId) => {
+    const row = await readMeetRow(groupId);
+    const active = await activeMeetView(row);
+    return { meetUrl: active?.url ?? null, backupMeetUrl: row?.backupMeetUrl ?? null };
+  };
+
+  // ---------- LiveKit servers ----------
+
+  /** Who is in the group's room on every server that answers. */
+  const collectParticipants = async (servers, roomName, { skip = null, exclude = null } = {}) => {
+    const results = await Promise.allSettled(
+      servers
+        .filter((server) => server.id !== skip)
+        .map((server) => getClient(server).listParticipants(roomName)),
+    );
+    return results
+      .filter((result) => result.status === "fulfilled")
+      .flatMap((result) => result.value)
+      .filter((participant) => !exclude || participant.identity !== exclude);
+  };
+
+  const probeServer = async (server, roomName) => {
+    try {
+      const rooms = await getClient(server).listRooms();
+      const others = rooms.filter(
+        (room) => room.name !== roomName && Number(room.numParticipants) > 0,
+      );
+      const ours = rooms.find((room) => room.name === roomName);
+      return {
+        server,
+        reachable: true,
+        groupInCall: Number(ours?.numParticipants ?? 0) > 0,
+        activeRooms: others.length,
+        totalParticipants: others.reduce((sum, room) => sum + Number(room.numParticipants), 0),
+      };
+    } catch (error) {
+      logger.error?.(`[calls] LiveKit server "${server.id}" is unavailable:`, error?.message ?? error);
+      return { server, reachable: false };
+    }
+  };
+
+  const hasCapacity = (config, probe) =>
+    (config.maxRooms === null || probe.activeRooms < config.maxRooms) &&
+    (config.maxTotalParticipants === null || probe.totalParticipants < config.maxTotalParticipants);
+
+  /**
+   * Servers to try, best first: the one the group is already on, otherwise every
+   * reachable server with room for a new call, in configured order.
+   */
+  const pickServers = (config, probes) => {
+    const reachable = probes.filter((probe) => probe.reachable);
+    const current = reachable.find((probe) => probe.groupInCall);
+    if (current) return { candidates: [current.server], reachable };
+    return {
+      candidates: reachable.filter((probe) => hasCapacity(config, probe)).map((probe) => probe.server),
+      reachable,
+    };
+  };
+
+  // ---------- Public API ----------
 
   const issueToken = async (userId, groupId) => {
     await getMembership(groupId, userId);
-    const { config, client } = requireLivekit();
-    const roomName = roomNameForGroup(groupId);
-    const identity = String(userId);
-
-    const participants = await callLivekit(async () => {
-      await client.ensureRoom(roomName, {
-        maxParticipants: config.maxParticipants,
-        emptyTimeout: config.emptyTimeoutSeconds,
+    const config = getConfig();
+    if (!config.configured) {
+      throw callError(503, "Video call chưa được cấu hình.", CALL_ERROR.NOT_CONFIGURED, {
+        fallback: await meetFallback(groupId),
       });
-      return client.listParticipants(roomName);
-    });
-
-    // A rejoin from another tab replaces the old session, so it does not count against the limit.
-    const others = activeParticipants(participants).filter((p) => p.identity !== identity);
-    if (others.length >= config.maxParticipants) {
-      throw ApiError.conflict(`Phòng gọi đã đủ ${config.maxParticipants} người.`);
     }
 
-    const user = await findUser(userId);
-    const token = await client.createToken({
-      identity,
-      name: user?.fullName || "Member",
-      metadata: JSON.stringify({ avatarUrl: user?.avatarUrl ?? null }),
-      roomName,
-      ttl: config.tokenTtl,
-    });
+    const roomName = roomNameForGroup(groupId);
+    const identity = String(userId);
+    const probes = await Promise.all(config.servers.map((server) => probeServer(server, roomName)));
+    const { candidates, reachable } = pickServers(config, probes);
 
-    return {
-      token,
-      url: config.url,
-      roomName,
-      maxParticipants: config.maxParticipants,
-    };
+    for (const server of candidates) {
+      const client = getClient(server);
+      let participants;
+      try {
+        await client.ensureRoom(roomName, {
+          maxParticipants: config.maxParticipants,
+          emptyTimeout: config.emptyTimeoutSeconds,
+        });
+        participants = await client.listParticipants(roomName);
+      } catch (error) {
+        logger.error?.(`[calls] Could not open the room on "${server.id}":`, error?.message ?? error);
+        continue;
+      }
+
+      // A rejoin from another tab replaces the old session, so it does not count.
+      const others = activeParticipants(participants).filter((p) => p.identity !== identity);
+      if (others.length >= config.maxParticipants) {
+        throw callError(
+          409,
+          `Phòng gọi đã đủ ${config.maxParticipants} người.`,
+          CALL_ERROR.ROOM_FULL,
+        );
+      }
+
+      const user = await findUser(userId);
+      const token = await client.createToken({
+        identity,
+        name: user?.fullName || "Member",
+        metadata: JSON.stringify({ avatarUrl: user?.avatarUrl ?? null }),
+        roomName,
+        ttl: config.tokenTtl,
+      });
+
+      return {
+        token,
+        url: server.url,
+        roomName,
+        maxParticipants: config.maxParticipants,
+        server: server.id,
+      };
+    }
+
+    const fallback = await meetFallback(groupId);
+    if (reachable.length > 0 && candidates.length === 0) {
+      throw callError(
+        503,
+        "Máy chủ gọi video đang quá tải.",
+        CALL_ERROR.CAPACITY_REACHED,
+        { fallback },
+      );
+    }
+    throw callError(
+      502,
+      "Không kết nối được máy chủ gọi video.",
+      CALL_ERROR.SERVER_UNAVAILABLE,
+      { fallback },
+    );
   };
 
   const getCallStatus = async (userId, groupId) => {
     await getMembership(groupId, userId);
-    const { client } = requireLivekit();
-    const participants = await callLivekit(() =>
-      client.listParticipants(roomNameForGroup(groupId)),
-    );
-    return buildCallStatus(groupId, participants);
+    const config = getConfig();
+    const participants = config.configured
+      ? await collectParticipants(config.servers, roomNameForGroup(groupId))
+      : [];
+    const meet = await activeMeetView(await readMeetRow(groupId));
+    return buildCallStatus(groupId, participants, meet);
   };
 
-  /** Broadcasts the new call state to the group's chat room. */
-  const handleWebhookEvent = async (event, client) => {
-    if (!CALL_WEBHOOK_EVENTS.has(event?.event)) return { handled: false };
+  const broadcastStatus = async (groupId, options = {}) => {
+    const config = getConfig();
+    const participants = config.configured
+      ? await collectParticipants(config.servers, roomNameForGroup(groupId), options)
+      : [];
+    const meet = await activeMeetView(await readMeetRow(groupId));
+    const status = buildCallStatus(groupId, participants, meet);
+    emit(groupRoom(groupId), CALL_STATUS_EVENT, status);
+    return status;
+  };
 
-    const roomName = event.room?.name;
-    const groupId = groupIdFromRoomName(roomName);
-    if (!groupId) return { handled: false };
-
-    let participants = [];
-    if (event.event !== "room_finished") {
-      try {
-        participants = await client.listParticipants(roomName);
-      } catch (error) {
-        logger.error?.("[calls] Could not list participants:", error?.message ?? error);
-        return { handled: false, groupId };
-      }
-      // The list can still include someone who just left.
-      if (event.event === "participant_left" && event.participant?.identity) {
-        participants = participants.filter((p) => p.identity !== event.participant.identity);
-      }
+  /** Verifies the webhook against each configured server and rebroadcasts the call state. */
+  const receiveWebhook = async (rawBody, authHeader) => {
+    const config = getConfig();
+    if (!config.configured) {
+      throw callError(503, "Video call chưa được cấu hình.", CALL_ERROR.NOT_CONFIGURED);
     }
 
-    const status = buildCallStatus(groupId, participants);
-    emit(groupRoom(groupId), CALL_STATUS_EVENT, status);
+    let event = null;
+    let source = null;
+    for (const server of config.servers) {
+      try {
+        event = await getClient(server).receiveWebhook(rawBody, authHeader);
+        source = server;
+        break;
+      } catch {
+        // Signed by another server's key, or not signed at all.
+      }
+    }
+    if (!event) throw ApiError.unauthorized("Webhook không hợp lệ.");
+
+    if (!CALL_WEBHOOK_EVENTS.has(event.event)) return { handled: false };
+    const groupId = groupIdFromRoomName(event.room?.name);
+    if (!groupId) return { handled: false };
+
+    await broadcastStatus(groupId, {
+      // A finished room is empty on the server that sent the event.
+      skip: event.event === "room_finished" ? source.id : null,
+      // The list can still include someone who just left.
+      exclude: event.event === "participant_left" ? (event.participant?.identity ?? null) : null,
+    });
     return { handled: true, groupId };
   };
 
-  const receiveWebhook = async (rawBody, authHeader) => {
-    const { client } = requireLivekit();
-    let event;
-    try {
-      event = await client.receiveWebhook(rawBody, authHeader);
-    } catch {
-      throw ApiError.unauthorized("Webhook không hợp lệ.");
+  /** Stores the group's Meet (first one wins) and tells everyone. */
+  const publishMeet = async (userId, groupId, url) => {
+    const claimed = await meetStore.claimActiveMeet(groupId, {
+      url,
+      userId,
+      expiredBefore: new Date(now() - MEET_ACTIVE_TTL_MS),
+    });
+    if (claimed) {
+      try {
+        await postChatMessage(userId, groupId, `📹 Google Meet cho nhóm: ${url}`);
+      } catch (error) {
+        logger.error?.("[calls] Could not post the Meet link to chat:", error?.message ?? error);
+      }
     }
-    return handleWebhookEvent(event, client);
+    const status = await broadcastStatus(groupId);
+    return { meet: status.meet, created: claimed };
   };
 
-  return { issueToken, getCallStatus, receiveWebhook };
+  /** Creates a Meet through the Google API, or returns the group's current one. */
+  const startMeet = async (userId, groupId) => {
+    await getMembership(groupId, userId);
+    const row = await readMeetRow(groupId);
+    const existing = await activeMeetView(row);
+    if (existing) return { meet: existing, created: false };
+
+    const fallback = { backupMeetUrl: row?.backupMeetUrl ?? null };
+    const { meet: meetConfig } = getConfig();
+    if (!meetConfig.configured) {
+      throw callError(
+        503,
+        "Chưa cấu hình tự tạo Google Meet.",
+        CALL_ERROR.MEET_AUTO_UNAVAILABLE,
+        { fallback },
+      );
+    }
+
+    const last = lastMeetCreatedAt.get(groupId);
+    if (last && now() - last < MEET_CREATE_COOLDOWN_MS) {
+      throw callError(
+        429,
+        "Nhóm vừa tạo Google Meet, thử lại sau ít phút.",
+        CALL_ERROR.MEET_RATE_LIMITED,
+        { fallback },
+      );
+    }
+    lastMeetCreatedAt.set(groupId, now());
+
+    let url;
+    try {
+      url = await getMeetClient(meetConfig).createSpace();
+    } catch (error) {
+      logger.error?.(
+        "[calls] Google Meet API failed:",
+        error?.response?.data?.error?.message ?? error?.message ?? error,
+      );
+      throw callError(
+        503,
+        "Không tự tạo được Google Meet.",
+        CALL_ERROR.MEET_AUTO_UNAVAILABLE,
+        { fallback },
+      );
+    }
+    return publishMeet(userId, groupId, url);
+  };
+
+  /** A Meet link a member created by hand and pasted. */
+  const shareMeet = async (userId, groupId, rawUrl) => {
+    await getMembership(groupId, userId);
+    const url = normalizeMeetUrl(rawUrl);
+    if (!url) {
+      throw callError(
+        400,
+        "Link phải là Google Meet, ví dụ https://meet.google.com/abc-defg-hij.",
+        CALL_ERROR.MEET_INVALID_URL,
+      );
+    }
+    return publishMeet(userId, groupId, url);
+  };
+
+  const endMeet = async (userId, groupId) => {
+    await getMembership(groupId, userId);
+    await meetStore.clearActiveMeet(groupId);
+    return broadcastStatus(groupId);
+  };
+
+  return { issueToken, getCallStatus, receiveWebhook, startMeet, shareMeet, endMeet };
 };
 
 export const callsService = createCallsService();

@@ -1,10 +1,15 @@
 import { Router } from "express";
 import Joi from "joi";
 import { verifyTokenMiddleware } from "../../middlewares/authMiddleware.js";
-import { getStatus, issueToken } from "./calls.controller.js";
+import { validateBody } from "../../validations/schemas.js";
+import { endMeet, getStatus, issueToken, shareMeet, startMeet } from "./calls.controller.js";
 
 const groupIdParamSchema = Joi.object({
   groupId: Joi.string().uuid().required(),
+});
+
+const shareMeetSchema = Joi.object({
+  url: Joi.string().trim().max(300).required(),
 });
 
 const validateGroupId = (req, res, next) => {
@@ -27,5 +32,10 @@ router.use(validateGroupId);
 
 router.get("/", getStatus);
 router.post("/token", issueToken);
+
+// Google Meet fallback: create through the API, share a pasted link, or end it.
+router.post("/meet", startMeet);
+router.put("/meet", validateBody(shareMeetSchema), shareMeet);
+router.delete("/meet", endMeet);
 
 export default router;

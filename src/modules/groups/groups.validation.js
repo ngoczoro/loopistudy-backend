@@ -24,6 +24,8 @@ export const updateGroupSchema = Joi.object({
   name: name.optional(),
   description: description.optional(),
   removeAvatar: Joi.boolean().optional(),
+  // Standing Google Meet link for when Loopi calls are unavailable. Empty clears it.
+  backupMeetUrl: Joi.string().trim().max(300).allow("", null).optional(),
 });
 
 export const joinGroupSchema = Joi.object({

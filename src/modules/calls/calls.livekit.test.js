@@ -6,18 +6,43 @@ import { groupIdFromRoomName, roomNameForGroup } from "./calls.constants.js";
 import { signWebhook, TEST_LIVEKIT_ENV } from "./calls.testUtils.js";
 
 const config = readCallsConfig(TEST_LIVEKIT_ENV);
+const server = config.servers[0];
+const KEYS = { LIVEKIT_URL: "wss://x", LIVEKIT_API_KEY: "k", LIVEKIT_API_SECRET: "s" };
 
 describe("readCallsConfig", () => {
   it("is not configured until url, key and secret are set", () => {
     expect(readCallsConfig({}).configured).toBe(false);
     expect(readCallsConfig({ LIVEKIT_URL: "wss://x", LIVEKIT_API_KEY: "k" }).configured).toBe(false);
     expect(config.configured).toBe(true);
+    expect(config.servers.map((s) => s.id)).toEqual(["primary"]);
   });
 
   it("uses https for the room API and keeps wss for clients", () => {
-    expect(config.url).toBe("wss://loopi-test.livekit.cloud");
-    expect(config.apiUrl).toBe("https://loopi-test.livekit.cloud");
-    expect(readCallsConfig({ LIVEKIT_URL: "ws://localhost:7880" }).apiUrl).toBe("http://localhost:7880");
+    expect(server.url).toBe("wss://loopi-test.livekit.cloud");
+    expect(server.apiUrl).toBe("https://loopi-test.livekit.cloud");
+    expect(readCallsConfig({ ...KEYS, LIVEKIT_URL: "ws://localhost:7880" }).servers[0].apiUrl).toBe(
+      "http://localhost:7880",
+    );
+  });
+
+  it("adds the fallback server after the main one", () => {
+    const both = readCallsConfig({
+      ...KEYS,
+      LIVEKIT_FALLBACK_URL: "wss://cloud.example",
+      LIVEKIT_FALLBACK_API_KEY: "fk",
+      LIVEKIT_FALLBACK_API_SECRET: "fs",
+    });
+    expect(both.servers.map((s) => [s.id, s.url])).toEqual([
+      ["primary", "wss://x"],
+      ["fallback", "wss://cloud.example"],
+    ]);
+    // A fallback alone still works.
+    const onlyFallback = readCallsConfig({
+      LIVEKIT_FALLBACK_URL: "wss://cloud.example",
+      LIVEKIT_FALLBACK_API_KEY: "fk",
+      LIVEKIT_FALLBACK_API_SECRET: "fs",
+    });
+    expect(onlyFallback.servers.map((s) => s.id)).toEqual(["fallback"]);
   });
 
   it("falls back to defaults for missing or invalid limits", () => {
@@ -25,6 +50,26 @@ describe("readCallsConfig", () => {
     expect(config.tokenTtl).toBe("2h");
     expect(readCallsConfig({ CALL_MAX_PARTICIPANTS: "abc" }).maxParticipants).toBe(25);
     expect(readCallsConfig({ CALL_MAX_PARTICIPANTS: "10" }).maxParticipants).toBe(10);
+  });
+
+  it("treats server-wide limits as optional, and 0 as a real limit", () => {
+    expect(config.maxRooms).toBeNull();
+    expect(config.maxTotalParticipants).toBeNull();
+    expect(readCallsConfig({ CALL_MAX_ROOMS: "" }).maxRooms).toBeNull();
+    expect(readCallsConfig({ CALL_MAX_ROOMS: "0" }).maxRooms).toBe(0);
+    expect(readCallsConfig({ CALL_MAX_TOTAL_PARTICIPANTS: "200" }).maxTotalParticipants).toBe(200);
+    expect(readCallsConfig({ CALL_MAX_ROOMS: "-1" }).maxRooms).toBeNull();
+  });
+
+  it("enables the Meet API only with all three Google values", () => {
+    expect(config.meet.configured).toBe(false);
+    expect(
+      readCallsConfig({
+        GOOGLE_MEET_CLIENT_ID: "id",
+        GOOGLE_MEET_CLIENT_SECRET: "secret",
+        GOOGLE_MEET_REFRESH_TOKEN: "token",
+      }).meet.configured,
+    ).toBe(true);
   });
 });
 
@@ -42,7 +87,7 @@ describe("room names", () => {
 });
 
 describe("createLivekitClient", () => {
-  const client = createLivekitClient(config);
+  const client = createLivekitClient(server);
 
   it("signs a token that only opens the group's room", async () => {
     const token = await client.createToken({
@@ -53,8 +98,8 @@ describe("createLivekitClient", () => {
       ttl: "2h",
     });
 
-    const claims = jwt.verify(token, config.apiSecret);
-    expect(claims.iss).toBe(config.apiKey);
+    const claims = jwt.verify(token, server.apiSecret);
+    expect(claims.iss).toBe(server.apiKey);
     expect(claims.sub).toBe("user-1");
     expect(claims.name).toBe("Như Quỳnh");
     expect(claims.metadata).toBe(JSON.stringify({ avatarUrl: null }));
@@ -85,7 +130,7 @@ describe("createLivekitClient", () => {
   it("rejects a webhook signed with another secret", async () => {
     const body = JSON.stringify({ event: "room_finished", room: { name: "group-abc" } });
     const auth = await signWebhook(body, {
-      apiKey: config.apiKey,
+      apiKey: server.apiKey,
       apiSecret: "another-secret-that-is-long-enough-xx",
     });
     await expect(client.receiveWebhook(body, auth)).rejects.toThrow();

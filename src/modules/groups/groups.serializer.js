@@ -24,6 +24,7 @@ export const serializeGroup = (membership, extras = {}) => {
     description: group.description ?? null,
     avatarUrl: group.avatarUrl ?? null,
     inviteCode: group.inviteCode,
+    backupMeetUrl: group.backupMeetUrl ?? null,
     owner: serializeUserSummary(group.owner),
     myRole: membership.role,
     memberCount: extras.memberCount ?? 0,
