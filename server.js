@@ -8,6 +8,7 @@ import {
   startTaskAlertScheduler,
 } from "./src/modules/groups/index.js";
 import { startAssistantIndexWorker } from "./src/modules/assistant/index.js";
+import { startCallSessionSweeper } from "./src/modules/calls/index.js";
 import sequelize from "./src/config/database.js";
 import { initializeModels } from "./src/models/index.js";
 
@@ -46,6 +47,7 @@ const startServer = async () => {
       console.log(`✓ API Documentation: http://localhost:${PORT}/api/v1`);
       startTaskAlertScheduler();
       startAssistantIndexWorker();
+      startCallSessionSweeper();
     });
   } catch (error) {
     console.error("✗ Failed to start server:", error.message);

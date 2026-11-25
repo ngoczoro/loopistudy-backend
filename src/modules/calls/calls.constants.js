@@ -28,6 +28,16 @@ export const MEET_ACTIVE_TTL_MS = 3 * 60 * 60 * 1000;
 /** At most one Meet space created per group in this window. */
 export const MEET_CREATE_COOLDOWN_MS = 60 * 1000;
 
+/** Sent to each member's `user:{userId}` room when the group's call starts or ends. */
+export const CALL_STARTED_EVENT = "call:started";
+export const CALL_ENDED_EVENT = "call:ended";
+/** After a token for an empty room, check this long later whether the call really began. */
+export const CALL_START_CHECK_MS = 6 * 1000;
+/** How often the server checks which calls started or ended (works without webhooks). */
+export const CALL_SWEEP_INTERVAL_MS = 20 * 1000;
+/** A room must stay empty this long before the call counts as ended, so reconnects do not end it. */
+export const CALL_END_GRACE_MS = 40 * 1000;
+
 /** LiveKit webhook events that change who is in a call. */
 export const CALL_WEBHOOK_EVENTS = new Set([
   "participant_joined",
@@ -37,11 +47,13 @@ export const CALL_WEBHOOK_EVENTS = new Set([
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export const isUuid = (value) => typeof value === "string" && UUID_PATTERN.test(value);
+
 export const roomNameForGroup = (groupId) => `${CALL_ROOM_PREFIX}${groupId}`;
 
 /** Group id from a room name, or null for rooms this app did not create. */
 export const groupIdFromRoomName = (roomName) => {
   if (typeof roomName !== "string" || !roomName.startsWith(CALL_ROOM_PREFIX)) return null;
   const groupId = roomName.slice(CALL_ROOM_PREFIX.length);
-  return UUID_PATTERN.test(groupId) ? groupId : null;
+  return isUuid(groupId) ? groupId : null;
 };

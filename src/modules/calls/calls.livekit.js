@@ -68,3 +68,25 @@ export const getLivekitClient = (server) => {
   if (!cache.has(key)) cache.set(key, createLivekitClient(server));
   return cache.get(key);
 };
+
+/**
+ * Who is in `roomName` on every server that answers. `reached` is false when no server
+ * answered, so callers can tell "empty" from "unknown".
+ */
+export const collectParticipants = async (
+  getClient,
+  servers,
+  roomName,
+  { skip = null, exclude = null } = {},
+) => {
+  const results = await Promise.allSettled(
+    servers
+      .filter((server) => server.id !== skip)
+      .map((server) => getClient(server).listParticipants(roomName)),
+  );
+  const participants = results
+    .filter((result) => result.status === "fulfilled")
+    .flatMap((result) => result.value)
+    .filter((participant) => !exclude || participant.identity !== exclude);
+  return { participants, reached: results.some((result) => result.status === "fulfilled") };
+};

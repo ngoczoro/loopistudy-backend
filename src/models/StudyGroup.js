@@ -59,6 +59,16 @@ export const defineStudyGroupModel = (sequelize) => {
         allowNull: true,
         field: "active_meet_at",
       },
+      callStartedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "call_started_at",
+      },
+      callStartedBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "call_started_by",
+      },
     },
     modelOptions("study_groups", { paranoid: true }),
   );

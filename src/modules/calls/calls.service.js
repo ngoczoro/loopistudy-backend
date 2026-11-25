@@ -4,9 +4,10 @@ import { getMembershipOrThrow } from "../groups/groups.access.js";
 import { sendMessage } from "../groups/messages.service.js";
 import { findUserById } from "../users/user.repository.js";
 import { readCallsConfig } from "./calls.config.js";
-import { getLivekitClient } from "./calls.livekit.js";
+import { collectParticipants as collectFromServers, getLivekitClient } from "./calls.livekit.js";
 import { getGoogleMeetClient, normalizeMeetUrl } from "./calls.meet.js";
 import * as callsRepository from "./calls.repository.js";
+import { callSessions } from "./calls.sessions.js";
 import {
   CALL_ERROR,
   CALL_STATUS_EVENT,
@@ -45,6 +46,7 @@ export const createCallsService = ({
   meetStore = callsRepository,
   getMeetClient = getGoogleMeetClient,
   postChatMessage = (userId, groupId, content) => sendMessage(userId, groupId, { content }),
+  sessions = callSessions,
   now = () => Date.now(),
   logger = console,
 } = {}) => {
@@ -83,17 +85,8 @@ export const createCallsService = ({
   // ---------- LiveKit servers ----------
 
   /** Who is in the group's room on every server that answers. */
-  const collectParticipants = async (servers, roomName, { skip = null, exclude = null } = {}) => {
-    const results = await Promise.allSettled(
-      servers
-        .filter((server) => server.id !== skip)
-        .map((server) => getClient(server).listParticipants(roomName)),
-    );
-    return results
-      .filter((result) => result.status === "fulfilled")
-      .flatMap((result) => result.value)
-      .filter((participant) => !exclude || participant.identity !== exclude);
-  };
+  const collectParticipants = async (servers, roomName, options) =>
+    (await collectFromServers(getClient, servers, roomName, options)).participants;
 
   const probeServer = async (server, roomName) => {
     try {
@@ -182,6 +175,9 @@ export const createCallsService = ({
         ttl: config.tokenTtl,
       });
 
+      // First one in: once they have connected, the group is told the call started.
+      if (others.length === 0) sessions.scheduleStartCheck(groupId);
+
       return {
         token,
         url: server.url,
@@ -259,6 +255,9 @@ export const createCallsService = ({
       // The list can still include someone who just left.
       exclude: event.event === "participant_left" ? (event.participant?.identity ?? null) : null,
     });
+    if (event.event === "participant_joined") {
+      await sessions.confirmStart(groupId, { identity: event.participant?.identity ?? null });
+    }
     return { handled: true, groupId };
   };
 

@@ -75,6 +75,7 @@ const setup = ({
   const meetStore = fakeMeetStore(clock, meetRow);
   const emit = jest.fn();
   const postChatMessage = jest.fn(async () => ({}));
+  const sessions = { scheduleStartCheck: jest.fn(), confirmStart: jest.fn(async () => false) };
   const service = createCallsService({
     getConfig: () => ({
       configured: servers.length > 0,
@@ -94,10 +95,11 @@ const setup = ({
     meetStore,
     getMeetClient: () => meetClient,
     postChatMessage,
+    sessions,
     now: () => clock.now,
     logger: { error: jest.fn() },
   });
-  return { service, clients: clientById, meetClient, meetStore, emit, postChatMessage, clock };
+  return { service, clients: clientById, meetClient, meetStore, emit, postChatMessage, sessions, clock };
 };
 
 const expectCallError = async (promise, statusCode, code) => {
@@ -174,6 +176,16 @@ describe("issueToken", () => {
     expect(error.message).toContain("2 người");
     expect(error.details).toBeUndefined();
     expect(clients.primary.createToken).not.toHaveBeenCalled();
+  });
+
+  it("asks for a start check only when the room was empty", async () => {
+    const empty = setup();
+    await empty.service.issueToken("u1", GROUP_ID);
+    expect(empty.sessions.scheduleStartCheck).toHaveBeenCalledWith(GROUP_ID);
+
+    const busy = setup({ clients: { primary: fakeClient({ participants: [participant("a")] }) } });
+    await busy.service.issueToken("u1", GROUP_ID);
+    expect(busy.sessions.scheduleStartCheck).not.toHaveBeenCalled();
   });
 
   it("lets a member rejoin a full room from another tab", async () => {
@@ -382,6 +394,14 @@ describe("receiveWebhook", () => {
     expect(target).toBe(`group:${GROUP_ID}`);
     expect(eventName).toBe("call:status");
     expect(payload).toMatchObject({ groupId: GROUP_ID, active: true, count: 2, meet: null });
+  });
+
+  it("checks whether the call just started when someone joins", async () => {
+    await deliverFrom("primary", { event: "participant_joined", room: { name: ROOM }, participant: { identity: "b" } });
+    expect(ctx.sessions.confirmStart).toHaveBeenCalledWith(GROUP_ID, { identity: "b" });
+
+    await deliverFrom("primary", { event: "participant_left", room: { name: ROOM }, participant: { identity: "b" } });
+    expect(ctx.sessions.confirmStart).toHaveBeenCalledTimes(1);
   });
 
   it("leaves out the person who just left", async () => {

@@ -31,3 +31,39 @@ export const clearActiveMeet = async (groupId) =>
     { activeMeetUrl: null, activeMeetBy: null, activeMeetAt: null },
     { where: { id: groupId } },
   );
+
+// ---------- Running Loopi call ----------
+
+const GroupMember = () => sequelize.models.GroupMember;
+
+export const findCallState = async (groupId) =>
+  StudyGroup().findByPk(groupId, { attributes: ["id", "name", "callStartedAt", "callStartedBy"] });
+
+/** Groups the server believes are in a call. */
+export const findActiveCalls = async () =>
+  StudyGroup().findAll({
+    attributes: ["id", "name", "callStartedAt", "callStartedBy"],
+    where: { callStartedAt: { [Op.ne]: null } },
+  });
+
+/** Marks the call as started only if none is recorded. Returns true when this call won. */
+export const claimCallStart = async (groupId, { userId, startedAt }) => {
+  const [count] = await StudyGroup().update(
+    { callStartedAt: startedAt, callStartedBy: userId },
+    { where: { id: groupId, callStartedAt: null } },
+  );
+  return count > 0;
+};
+
+/** Clears the call only if it is still the one that started at `startedAt`. */
+export const clearCallStart = async (groupId, startedAt) => {
+  const [count] = await StudyGroup().update(
+    { callStartedAt: null, callStartedBy: null },
+    { where: { id: groupId, callStartedAt: startedAt } },
+  );
+  return count > 0;
+};
+
+/** Members to tell about the call, with their mute setting. */
+export const findCallRecipients = async (groupId) =>
+  GroupMember().findAll({ attributes: ["userId", "muted"], where: { groupId }, raw: true });
