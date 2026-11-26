@@ -315,17 +315,40 @@ describe("sweep", () => {
     expect(ctx.postChatMessage).not.toHaveBeenCalled();
   });
 
-  it("never ends a call while a server is unreachable", async () => {
+  it("ends a call on the fallback server while the main server is switched off", async () => {
     const ctx = setup({
       servers: [PRIMARY, FALLBACK],
-      clients: { primary: fakeClient(), fallback: fakeClient({ down: true }) },
+      clients: { primary: fakeClient({ down: true }), fallback: fakeClient() },
       row: { callStartedAt: new Date(START), callStartedBy: STARTER },
     });
 
-    for (let i = 0; i < 5; i += 1) {
-      await ctx.sessions.sweep();
-      ctx.clock.now += 20 * 1000;
-    }
+    ctx.clock.now = START + 10 * MINUTE;
+    await ctx.sessions.sweep();
+    ctx.clock.now += 20 * 1000;
+    await ctx.sessions.sweep();
+    ctx.clock.now += 20 * 1000;
+    await ctx.sessions.sweep();
+
+    expect(ctx.store.rows.get(GROUP_ID).callStartedAt).toBeNull();
+    expect(eventsNamed(ctx.emit, "call:ended")).toHaveLength(3);
+  });
+
+  it("keeps a call going through a short outage of the server it is on", async () => {
+    const primary = fakeClient({ rooms: [busyRoom()] });
+    const ctx = setup({
+      clients: { primary },
+      row: { callStartedAt: new Date(START), callStartedBy: STARTER },
+    });
+
+    await ctx.sessions.sweep();
+    primary.listRooms.mockRejectedValueOnce(new Error("ETIMEDOUT"));
+    ctx.clock.now += 20 * 1000;
+    await ctx.sessions.sweep();
+    ctx.clock.now += 20 * 1000;
+    await ctx.sessions.sweep();
+    ctx.clock.now += 20 * 1000;
+    await ctx.sessions.sweep();
+
     expect(ctx.store.clearCallStart).not.toHaveBeenCalled();
   });
 

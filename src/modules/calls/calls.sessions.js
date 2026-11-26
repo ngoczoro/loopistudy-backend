@@ -246,7 +246,11 @@ export const createCallSessions = ({
   /**
    * Compares the rooms LiveKit has with the calls recorded in the DB: announces calls
    * nobody noticed starting, and ends calls whose room stayed empty past the grace time.
-   * A call is never ended while a server is unreachable, since its room may still be busy.
+   *
+   * Only servers that answer are looked at. A server that is switched off (e.g. the
+   * Azure VM at night) cannot host a call, so waiting for it would leave calls on the
+   * other server open forever. A short outage of the server a call is on does not end
+   * it: the room is busy again on the next sweep, well within the grace time.
    */
   const sweep = async () => {
     const config = getConfig();
@@ -256,7 +260,6 @@ export const createCallSessions = ({
       const results = await Promise.allSettled(
         config.servers.map((server) => getClient(server).listRooms()),
       );
-      const allReached = results.every((result) => result.status === "fulfilled");
       const busy = new Set(
         results
           .filter((result) => result.status === "fulfilled")
@@ -278,7 +281,6 @@ export const createCallSessions = ({
           emptySince.delete(row.id);
           continue;
         }
-        if (!allReached) continue;
         const since = emptySince.get(row.id);
         if (since === undefined) {
           emptySince.set(row.id, now());
