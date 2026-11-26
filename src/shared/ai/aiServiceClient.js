@@ -56,8 +56,10 @@ export const createAiServiceClient = ({
   /**
    * POST `body` as JSON to `path` and return the parsed JSON answer.
    * Throws AiServiceError for every failure: network, timeout, open circuit, HTTP error.
-   * Errors the service reports about the request itself (400, 413) and QUEUE_FULL do not
-   * count towards the circuit breaker: the service is up.
+   * Only failures of the service itself count towards the circuit breaker: no answer, a
+   * wrong key, or a 5xx without a known code. Errors it reports about the request (400, 413),
+   * a provider (Ollama down, OpenAI failed, bad JSON), a model still loading or a full queue
+   * mean the service is up, so they do not stop the other provider being tried through it.
    */
   const post = async (path, body, { timeoutMs, signal, priority, requestId } = {}) => {
     const { url, key, timeoutMs: defaultTimeout } = settings();
@@ -101,9 +103,10 @@ export const createAiServiceClient = ({
 
       const json = await response.json().catch(() => null);
       if (!response.ok) {
-        // A full Ollama queue (phase 5) means the service is busy, not broken.
-        const busy = json?.error?.code === "QUEUE_FULL";
-        if (!busy && (response.status >= 500 || response.status === 401)) recordFailure();
+        const code = json?.error?.code;
+        const serviceBroken =
+          response.status === 401 || (response.status >= 500 && (!code || code === "INTERNAL"));
+        if (serviceBroken) recordFailure();
         throw new AiServiceError(json?.error?.message ?? `AI service HTTP ${response.status}`, {
           status: response.status,
           code: json?.error?.code ?? "AI_SERVICE_ERROR",

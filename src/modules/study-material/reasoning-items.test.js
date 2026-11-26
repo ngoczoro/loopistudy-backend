@@ -172,13 +172,31 @@ describe("buildReasoningQuestions", () => {
   });
 
   it("skips a paragraph when the model call fails", async () => {
+    const calls = [];
     const questions = await buildReasoningQuestions({
       sources: [NOTE],
-      ask: async () => {
+      ask: async (type) => {
+        calls.push(type);
         throw new Error("Ollama timed out");
       },
     });
     expect(questions).toEqual([]);
+    expect(calls).toEqual(["why", "condition"]);
+  });
+
+  it("stops at once when the AI service circuit is open", async () => {
+    const calls = [];
+    const questions = await buildReasoningQuestions({
+      sources: [NOTE],
+      ask: async (type) => {
+        calls.push(type);
+        throw Object.assign(new Error("AI service is unavailable (circuit open)"), {
+          code: "AI_SERVICE_CIRCUIT_OPEN",
+        });
+      },
+    });
+    expect(questions).toEqual([]);
+    expect(calls).toEqual(["why"]);
   });
 });
 

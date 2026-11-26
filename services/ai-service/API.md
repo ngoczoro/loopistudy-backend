@@ -57,6 +57,8 @@ Mọi lỗi đều có cùng dạng:
 
 **Quy tắc cho backend:** mọi lỗi từ service (kể cả lỗi mạng và lỗi vượt thời gian chờ ở phía client) đều được xử lý **như khi provider đó lỗi ở code hiện tại**. Nghĩa là backend chạy tiếp theo thứ tự dự phòng sẵn có. Riêng `QUEUE_FULL` thì backend nên chuyển sang OpenAI ngay, không thử lại Ollama.
 
+**Ngắt mạch ở backend** (`src/shared/ai/aiServiceClient.js`): sau 3 lỗi liên tiếp **của chính service**, backend ngừng gọi service trong 30 giây. Lỗi của chính service gồm: không trả lời, quá thời gian chờ, sai khóa (401), và 5xx có mã `INTERNAL` hoặc không có mã. Các lỗi `PROVIDER_*`, `INVALID_MODEL_OUTPUT`, `MODEL_NOT_READY`, `QUEUE_FULL` và lỗi 4xx **không** được tính. Lý do: khi Ollama chết, service vẫn chạy, nên backend vẫn phải gọi được OpenAI qua service.
+
 ---
 
 ## `GET /health`

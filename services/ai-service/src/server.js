@@ -2,6 +2,8 @@ import "dotenv/config";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createEmbedder } from "./embedding.js";
+import { createOllama } from "./providers/ollama.js";
+import { createOpenAI } from "./providers/openai.js";
 import { createLogger } from "./logger.js";
 import { createStatus } from "./status.js";
 
@@ -18,7 +20,8 @@ try {
 const logger = createLogger(config.logLevel);
 const status = createStatus(config);
 const embedder = createEmbedder(config, { status, logger });
-const app = createApp({ config, logger, status, embedder });
+const providers = { ollama: createOllama(config), openai: createOpenAI(config) };
+const app = createApp({ config, logger, status, embedder, providers });
 
 // Load the model now so the first request does not wait for it (or download it).
 if (config.embedding.preload) embedder.preload();

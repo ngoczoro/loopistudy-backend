@@ -1,6 +1,6 @@
-import { getOpenAIConfig } from "../ai/ai.constants.js";
-import { generateJson } from "../ai/services/ai.provider.service.js";
 import { completeJson, ollamaModelName } from "./ollama.js";
+import { completeOpenAIJson } from "./openai-json.js";
+import { getOpenAIConfig } from "../ai/ai.constants.js";
 import { buildClozeCards, buildSentenceQuestions, sentenceQuestionIsGrounded } from "./sentence-items.js";
 import { buildListCards, buildListQuestions, listQuestionIsGrounded } from "./list-items.js";
 import { buildReasoningQuestions, reasoningQuestionIsGrounded } from "./reasoning-items.js";
@@ -197,41 +197,40 @@ const tagWording = (map, provider, model) => {
   return map;
 };
 
-/** Ollama first. A thrown error tries OpenAI with the same prompt. */
-export const wordingFromModels = async ({ askOllama, askOpenAI, targets }) => {
+/**
+ * Ollama first. A thrown error tries OpenAI with the same prompt.
+ * `modelUsed()` names the model that answered (the AI service may run a different one than
+ * this backend's settings say); without it the configured names are used.
+ */
+export const wordingFromModels = async ({ askOllama, askOpenAI, targets, modelUsed = () => null }) => {
   try {
     const json = await askOllama();
-    return tagWording(questionsFromModelJson(json, targets), "ollama", ollamaModelName());
+    return tagWording(questionsFromModelJson(json, targets), "ollama", modelUsed() ?? ollamaModelName());
   } catch (error) {
     console.warn("Study wording Ollama failed, trying OpenAI:", error.message);
     const json = await askOpenAI();
     return tagWording(
       questionsFromModelJson(json, targets),
       "openai",
-      getOpenAIConfig().model,
+      modelUsed() ?? getOpenAIConfig().model,
     );
   }
 };
 
-const askOllamaJson = async ({ system, user, numPredict }) => {
-  const { json } = await completeJson({ system, user, numPredict });
-  return json;
-};
-
-const askOpenAIJson = ({ system, user, numPredict }) =>
-  generateJson({
-    instructions: system,
-    input: user,
-    temperature: 0.4,
-    maxOutputTokens: numPredict,
-  });
-
-const rewriteWithModels = (targets, { system, user, numPredict }) =>
-  wordingFromModels({
+const rewriteWithModels = (targets, { system, user, numPredict }) => {
+  let model = null;
+  const remember = (result) => {
+    model = result.model ?? null;
+    return result.json;
+  };
+  return wordingFromModels({
     targets,
-    askOllama: () => askOllamaJson({ system, user, numPredict }),
-    askOpenAI: () => askOpenAIJson({ system, user, numPredict }),
+    askOllama: async () => remember(await completeJson({ system, user, numPredict })),
+    askOpenAI: async () =>
+      remember(await completeOpenAIJson({ system, user, temperature: 0.4, maxTokens: numPredict })),
+    modelUsed: () => model,
   });
+};
 
 async function rewriteQuestionsWithOllama(targets) {
   const system = `Bạn viết câu hỏi ôn tập từ ghi chú của sinh viên.

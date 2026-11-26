@@ -10,7 +10,7 @@ Service chỉ được dùng khi backend có biến `AI_SERVICE_URL`. Khi biến
 |---|---|---|
 | 1 | Khung service: `/health`, `/info`, xác thực, log, Docker | Xong |
 | 2 | `POST /v1/embed` | Xong |
-| 3 | `POST /v1/llm/json` | Chưa làm |
+| 3 | `POST /v1/llm/json` | Xong |
 | 4 | `POST /v1/llm/chat`, `/v1/llm/chat/stream` | Chưa làm |
 | 5 | Hàng đợi Ollama | Chưa làm |
 
@@ -36,7 +36,7 @@ Khi service vừa khởi động, `/health` báo `"embedding": { "status": "load
 
 ## Bật service trong backend
 
-1. Chạy service như trên.
+1. Chạy service như trên. Từ giai đoạn 3, `.env` của service cần `OPENAI_API_KEY`, vì khi bật công tắc, quiz và flashcard gọi OpenAI qua service. Các tính năng khác (tóm tắt, AI Plan, ...) vẫn dùng khóa trong `.env` của backend.
 2. Kiểm tra vector của service giống vector backend tự tính. Lệnh này chạy ở thư mục gốc backend:
    ```sh
    AI_SERVICE_URL=http://localhost:5100 AI_SERVICE_KEY=<key> node scripts/ai-service/compare-embeddings.mjs

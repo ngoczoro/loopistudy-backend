@@ -1,4 +1,8 @@
+import { aiServiceClient } from "../../shared/ai/aiServiceClient.js";
+
 const DEFAULT_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 60_000);
+// Extra time on the HTTP call to the AI service, so its own provider timeout answers first.
+export const AI_SERVICE_MARGIN_MS = 5_000;
 
 const resolveBaseUrl = () => {
   const raw = String(process.env.OLLAMA_URL ?? "http://127.0.0.1:11434").trim();
@@ -22,6 +26,8 @@ const parseJsonObject = (raw) => {
 /**
  * Local Ollama JSON completion. Throws when the server is missing or too slow.
  * `format` may be a JSON schema object to make small models return exactly that shape.
+ * With AI_SERVICE_URL set, the AI service calls Ollama (POST /v1/llm/json); otherwise this
+ * process does. Either way the caller decides what to try next when it throws.
  */
 export const completeJson = async ({
   system,
@@ -30,6 +36,23 @@ export const completeJson = async ({
   format = "json",
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }) => {
+  if (aiServiceClient.enabled()) {
+    const result = await aiServiceClient.post(
+      "/v1/llm/json",
+      {
+        provider: "ollama",
+        system,
+        user,
+        schema: format === "json" ? null : format,
+        maxTokens: numPredict,
+        temperature: 0.4,
+        timeoutMs,
+      },
+      { timeoutMs: timeoutMs + AI_SERVICE_MARGIN_MS, priority: "study" },
+    );
+    return { model: result.model, json: result.json };
+  }
+
   const baseUrl = resolveBaseUrl();
   if (!baseUrl) throw new Error("OLLAMA_URL is not configured");
 

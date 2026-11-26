@@ -7,9 +7,8 @@
  *     the wrong ones; anything else is dropped
  * Kept to a couple per quiz: on a CPU-only machine each call takes ~15-30 s.
  */
-import { getOpenAIConfig } from "../ai/ai.constants.js";
-import { generateJson } from "../ai/services/ai.provider.service.js";
 import { completeJson, ollamaModelName } from "./ollama.js";
+import { completeOpenAIJson, openaiJsonAvailable } from "./openai-json.js";
 
 const LETTERS = ["A", "B", "C", "D"];
 const UNIT_MIN_CHARS = 120;
@@ -289,15 +288,15 @@ const askModels = async (type, passage) => {
     });
     return { json, provider: "ollama", model };
   } catch (error) {
-    if (!getOpenAIConfig().apiKey) throw error;
+    if (!openaiJsonAvailable()) throw error;
     console.warn("Reasoning question: Ollama failed, trying OpenAI:", error.message);
-    const json = await generateJson({
-      instructions: SYSTEM,
-      input: user,
+    const { json, model } = await completeOpenAIJson({
+      system: SYSTEM,
+      user,
       temperature: 0.4,
-      maxOutputTokens: 500,
+      maxTokens: 500,
     });
-    return { json, provider: "openai", model: getOpenAIConfig().model };
+    return { json, provider: "openai", model };
   }
 };
 
@@ -344,6 +343,8 @@ export const buildReasoningQuestions = async ({
       });
     } catch (error) {
       console.warn("Reasoning question skipped:", error.message);
+      // The AI service is down: every next paragraph would fail the same way.
+      if (error?.code === "AI_SERVICE_CIRCUIT_OPEN") break;
     }
   }
   return questions;

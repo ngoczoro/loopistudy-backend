@@ -125,20 +125,29 @@ describe("aiServiceClient", () => {
       expect(client.circuitState()).toBe("open");
     });
 
-    test("400 and QUEUE_FULL do not count; 5xx does", async () => {
+    test("errors the service reports about the request, a provider or itself being busy do not count", async () => {
       const answers = [
         jsonResponse(400, { error: { code: "INVALID_REQUEST", message: "bad" } }),
         jsonResponse(503, { error: { code: "QUEUE_FULL", message: "busy" } }),
-        jsonResponse(400, { error: { code: "INVALID_REQUEST", message: "bad" } }),
-        jsonResponse(503, { error: { code: "QUEUE_FULL", message: "busy" } }),
+        jsonResponse(502, { error: { code: "PROVIDER_ERROR", message: "Ollama failed" } }),
+        jsonResponse(504, { error: { code: "PROVIDER_TIMEOUT", message: "slow" } }),
+        jsonResponse(502, { error: { code: "INVALID_MODEL_OUTPUT", message: "no JSON" } }),
+        jsonResponse(503, { error: { code: "PROVIDER_NOT_CONFIGURED", message: "off" } }),
+        jsonResponse(503, { error: { code: "MODEL_NOT_READY", message: "loading" } }),
       ];
       const { client } = setup({ answer: (n) => answers[n - 1] });
-      for (let i = 0; i < 4; i += 1) await client.post("/v1/embed", {}).catch(() => {});
+      for (let i = 0; i < answers.length; i += 1) await client.post("/v1/llm/json", {}).catch(() => {});
       expect(client.circuitState()).toBe("closed");
+    });
 
-      const failing = setup({ answer: () => jsonResponse(500, { error: { code: "INTERNAL" } }) });
-      for (let i = 0; i < 3; i += 1) await failing.client.post("/v1/embed", {}).catch(() => {});
-      expect(failing.client.circuitState()).toBe("open");
+    test.each([
+      ["INTERNAL", jsonResponse(500, { error: { code: "INTERNAL" } })],
+      ["a 5xx without a body (a proxy)", jsonResponse(502, null)],
+      ["a wrong key", jsonResponse(401, { error: { code: "UNAUTHORIZED" } })],
+    ])("%s counts", async (_name, answer) => {
+      const { client } = setup({ answer: () => answer });
+      for (let i = 0; i < 3; i += 1) await client.post("/v1/embed", {}).catch(() => {});
+      expect(client.circuitState()).toBe("open");
     });
 
     test("a success resets the failure count", async () => {
