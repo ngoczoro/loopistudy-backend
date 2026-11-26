@@ -11,6 +11,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "3.8.1",
     "dotenv": "^17.4.1",
     "express": "^5.2.1"
   },

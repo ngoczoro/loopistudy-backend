@@ -1,6 +1,15 @@
+import { aiServiceClient } from "../../shared/ai/aiServiceClient.js";
 import { EMBEDDING_MODEL } from "./assistant.constants.js";
 
+const FALLBACK_EMBEDDING_MODEL = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+// Per call to the AI service: indexing sends passages in batches, a question is one text.
+const SERVICE_BATCH_SIZE = 16;
+const SERVICE_PASSAGE_TIMEOUT_MS = 30_000;
+
 let pipelinePromise = null;
+// The model that really computed the last vectors (the MiniLM fallback, or the service's).
+// Stored with each chunk: vectors of different models cannot be compared.
+let activeModel = null;
 
 const loadPipeline = async () => {
   if (!pipelinePromise) {
@@ -10,14 +19,19 @@ const loadPipeline = async () => {
       env.cacheDir = process.env.TRANSFORMERS_CACHE || "D:/ollama/hf-cache";
       env.allowLocalModels = true;
       try {
-        return await pipeline("feature-extraction", EMBEDDING_MODEL, { dtype: "q8" });
+        const extractor = await pipeline("feature-extraction", EMBEDDING_MODEL, { dtype: "q8" });
+        activeModel = EMBEDDING_MODEL;
+        return extractor;
       } catch (primaryError) {
         // e5 ONNX builds sometimes arrive corrupt on flaky networks; fall back to a small MiniLM.
         console.warn(
           `⚠ Primary embedding model failed (${EMBEDDING_MODEL}): ${primaryError.message}`,
         );
-        const fallback = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
-        return pipeline("feature-extraction", fallback, { dtype: "q8" });
+        const extractor = await pipeline("feature-extraction", FALLBACK_EMBEDDING_MODEL, {
+          dtype: "q8",
+        });
+        activeModel = FALLBACK_EMBEDDING_MODEL;
+        return extractor;
       }
     })().catch((error) => {
       pipelinePromise = null;
@@ -64,11 +78,37 @@ const l2Normalize = (vector) => {
 };
 
 /**
+ * Vectors from the AI service (POST /v1/embed). The service adds the e5 prefix itself.
+ * Any failure throws; callers already fall back to keyword search, so the model is never
+ * loaded into this backend while the service is switched on.
+ */
+const embedWithService = async (texts, isQuery) => {
+  const vectors = [];
+  for (let start = 0; start < texts.length; start += SERVICE_BATCH_SIZE) {
+    const batch = texts.slice(start, start + SERVICE_BATCH_SIZE).map((text) => String(text ?? ""));
+    const result = await aiServiceClient.post(
+      "/v1/embed",
+      { texts: batch, mode: isQuery ? "query" : "passage" },
+      { timeoutMs: isQuery ? undefined : SERVICE_PASSAGE_TIMEOUT_MS },
+    );
+    if (!Array.isArray(result?.vectors) || result.vectors.length !== batch.length) {
+      throw new Error("AI service returned the wrong number of vectors");
+    }
+    activeModel = result.model;
+    vectors.push(...result.vectors);
+  }
+  return vectors;
+};
+
+/**
  * Embed texts with multilingual-e5. Passages use "passage:", queries use "query:".
- * Returns null vectors skipped — caller should tolerate embedding failures.
+ * With AI_SERVICE_URL set, the AI service computes them; otherwise this process does.
+ * Throws when embedding is unavailable — callers fall back to keyword search.
  */
 export const embedTexts = async (texts, { isQuery = false } = {}) => {
   if (!texts?.length) return [];
+  if (aiServiceClient.enabled()) return embedWithService(texts, isQuery);
+
   const extractor = await loadPipeline();
   const prefix = isQuery ? "query: " : "passage: ";
   const vectors = [];
@@ -93,4 +133,5 @@ export const embedQuery = async (text) => {
   return vector;
 };
 
-export const getEmbeddingModelName = () => EMBEDDING_MODEL;
+/** The model behind the latest vectors; the configured e5 model before the first embed. */
+export const getEmbeddingModelName = () => activeModel ?? EMBEDDING_MODEL;

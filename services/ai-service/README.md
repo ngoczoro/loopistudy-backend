@@ -9,7 +9,7 @@ Service chỉ được dùng khi backend có biến `AI_SERVICE_URL`. Khi biến
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
 | 1 | Khung service: `/health`, `/info`, xác thực, log, Docker | Xong |
-| 2 | `POST /v1/embed` | Chưa làm |
+| 2 | `POST /v1/embed` | Xong |
 | 3 | `POST /v1/llm/json` | Chưa làm |
 | 4 | `POST /v1/llm/chat`, `/v1/llm/chat/stream` | Chưa làm |
 | 5 | Hàng đợi Ollama | Chưa làm |
@@ -23,6 +23,8 @@ cp .env.example .env      # rồi điền AI_SERVICE_KEY
 npm run dev               # tự khởi động lại khi sửa code
 ```
 
+Nên đặt `TRANSFORMERS_CACHE` trùng với thư mục cache của backend (mặc định là `D:/ollama/hf-cache`). Như vậy service dùng lại model e5 đã tải, không phải tải lại khoảng 120 MB.
+
 Kiểm tra service:
 
 ```sh
@@ -30,7 +32,24 @@ curl http://localhost:5100/health
 curl -H "x-internal-key: <AI_SERVICE_KEY>" http://localhost:5100/info
 ```
 
-Khi chưa có giai đoạn 2, `/health` luôn báo `"status": "degraded"`, vì model embedding chưa được nạp (`"embedding": { "status": "idle" }`).
+Khi service vừa khởi động, `/health` báo `"embedding": { "status": "loading" }` trong vài giây, hoặc lâu hơn nếu phải tải model lần đầu. Trong lúc này, `/v1/embed` trả `MODEL_NOT_READY` và backend tự tìm theo từ khóa. Khi model nạp xong, `/health` chuyển sang `ready`.
+
+## Bật service trong backend
+
+1. Chạy service như trên.
+2. Kiểm tra vector của service giống vector backend tự tính. Lệnh này chạy ở thư mục gốc backend:
+   ```sh
+   AI_SERVICE_URL=http://localhost:5100 AI_SERVICE_KEY=<key> node scripts/ai-service/compare-embeddings.mjs
+   ```
+   Kết quả phải là `PASS`. Khi đó dữ liệu đã index vẫn dùng được, không phải index lại.
+3. Thêm vào `.env` của backend rồi khởi động lại backend:
+   ```
+   AI_SERVICE_URL=http://localhost:5100
+   AI_SERVICE_KEY=<cùng khóa với service>
+   ```
+4. Muốn quay lại như cũ: để trống `AI_SERVICE_URL` rồi khởi động lại backend.
+
+Khi service tắt hoặc lỗi, Ask AI vẫn trả lời bằng tìm kiếm theo từ khóa. Sau 3 lần lỗi liên tiếp, backend ngừng gọi service trong 30 giây để không làm chậm request.
 
 ## Test
 

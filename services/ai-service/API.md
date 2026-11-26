@@ -129,7 +129,7 @@ Thay cho `embedTexts` và `embedQuery` trong `src/modules/assistant/assistant.em
 
 - `vectors[i]` tương ứng với `texts[i]`. Mỗi vector đã được chuẩn hóa L2 (độ dài bằng 1).
 - `model` là model đã thực sự tính vector. Backend phải lưu đúng giá trị này vào `document_chunks.embedding_model`.
-  - Hiện tại backend luôn lưu tên e5, kể cả khi đã chuyển sang model dự phòng MiniLM. Lỗi này sẽ sửa ở giai đoạn 2.
+  - Backend lấy tên model từ câu trả lời của service (`getEmbeddingModelName()`), kể cả khi service đang dùng model dự phòng MiniLM. Khi backend tự tính, tên model dự phòng cũng được ghi đúng (đã sửa ở giai đoạn 2).
   - Vector của hai model không so sánh được với nhau.
 - **Điều kiện bật công tắc:** vector do service tính và vector do backend tự tính cho cùng một đoạn văn phải có cosine ≥ 0,999.
 
@@ -219,7 +219,7 @@ data: {"durationMs":21000,"tokens":142}
 |---|---|---|
 | `AI_SERVICE_URL` | trống | **Công tắc.** Khi trống, backend tự tính embedding và tự gọi Ollama hoặc OpenAI như hiện tại |
 | `AI_SERVICE_KEY` | trống | Khóa gửi trong header `x-internal-key`. Bắt buộc khi đã đặt `AI_SERVICE_URL` |
-| `AI_SERVICE_TIMEOUT_MS` | `10000` | Thời gian chờ cho `/v1/embed`. Với `/v1/llm/*`, backend dùng `timeoutMs` của từng lần gọi, cộng thêm 5 giây |
+| `AI_SERVICE_TIMEOUT_MS` | `10000` | Thời gian chờ cho `/v1/embed` khi embed câu hỏi. Khi index tài liệu, backend gửi từng lô 16 đoạn với thời gian chờ 30 giây. Với `/v1/llm/*`, backend dùng `timeoutMs` của từng lần gọi, cộng thêm 5 giây |
 
 ### AI service (`services/ai-service/.env`)
 

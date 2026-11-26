@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { createEmbedder } from "./embedding.js";
 import { createLogger } from "./logger.js";
 import { createStatus } from "./status.js";
 
@@ -16,7 +17,11 @@ try {
 
 const logger = createLogger(config.logLevel);
 const status = createStatus(config);
-const app = createApp({ config, logger, status });
+const embedder = createEmbedder(config, { status, logger });
+const app = createApp({ config, logger, status, embedder });
+
+// Load the model now so the first request does not wait for it (or download it).
+if (config.embedding.preload) embedder.preload();
 
 const server = app.listen(config.port, () => {
   logger.info(`AI service listening on http://localhost:${config.port}`);
