@@ -7,6 +7,7 @@ import {
   providerNotConfigured,
   providerTimeout,
 } from "./errors.js";
+import { firstTokenSignal, readLines } from "./stream.js";
 
 // Same limits and prompt helpers as the backend's modules/ai (ai.provider.service.js and utils/).
 const MAX_INPUT_CHARS = 32_000;
@@ -49,12 +50,43 @@ const isJsonFormatRequestError = (error) =>
   (error?.status ?? error?.response?.status) === 400 &&
   /json|text\.format|format|invalid_request/i.test(String(error?.message ?? error?.error?.message ?? ""));
 
+const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
+
 /**
- * OpenAI Responses API in JSON mode, like the backend's `generateJson`: json_object first,
- * plain text with a "JSON only" instruction when the model rejects that format.
- * `createClient(apiKey)` is injectable for tests.
+ * OpenAI, with the requests the backend used to send itself:
+ *   json()   Responses API in JSON mode, like the backend's `generateJson`: json_object first,
+ *            plain text with a "JSON only" instruction when the model rejects that format
+ *   chat()   Chat Completions, one piece (assistant.llm.js generateWithOpenAI)
+ *   stream() Chat Completions streamed (assistant.llm.js streamWithOpenAI)
+ * `createClient(apiKey)` and `fetchImpl` are injectable for tests.
  */
-export const createOpenAI = (config, { createClient = (apiKey) => new OpenAI({ apiKey }) } = {}) => {
+export const createOpenAI = (
+  config,
+  {
+    createClient = (apiKey) => new OpenAI({ apiKey }),
+    fetchImpl = (...args) => globalThis.fetch(...args),
+  } = {},
+) => {
+  const completions = async (body, signal) => {
+    if (!config.openai.apiKey) throw providerNotConfigured("OpenAI");
+    const response = await fetchImpl(CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.openai.apiKey}` },
+      body: JSON.stringify({ model: config.openai.model, ...body }),
+      signal,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw providerError("OpenAI", `HTTP ${response.status} ${detail.slice(0, 180)}`);
+    }
+    return response;
+  };
+
+  const chatMessages = (system, user) => [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+
   let client = null;
   const getClient = () => (client ??= createClient(config.openai.apiKey));
 
@@ -102,6 +134,54 @@ export const createOpenAI = (config, { createClient = (apiKey) => new OpenAI({ a
         if (error instanceof ServiceError) throw error;
         if (call.timedOut()) throw providerTimeout("OpenAI", timeoutMs);
         throw providerError("OpenAI", error?.message ?? String(error));
+      }
+    },
+
+    async chat({ system, user, maxTokens, temperature, timeoutMs, signal }) {
+      const call = callSignal(timeoutMs, signal);
+      try {
+        const response = await completions(
+          { temperature, max_completion_tokens: maxTokens, messages: chatMessages(system, user) },
+          call.signal,
+        );
+        const data = await response.json();
+        return { model: config.openai.model, content: String(data?.choices?.[0]?.message?.content ?? "") };
+      } catch (error) {
+        if (error instanceof ServiceError) throw error;
+        if (call.timedOut()) throw providerTimeout("OpenAI", timeoutMs);
+        throw providerError("OpenAI", error?.message ?? String(error));
+      }
+    },
+
+    /** Yields tokens. `timeoutMs` is the wait for the first one. */
+    async *stream({ system, user, maxTokens, temperature, timeoutMs, signal }) {
+      const watch = firstTokenSignal(timeoutMs, signal);
+      try {
+        const response = await completions(
+          {
+            temperature,
+            max_completion_tokens: maxTokens,
+            stream: true,
+            messages: chatMessages(system, user),
+          },
+          watch.signal,
+        );
+        for await (const line of readLines(response.body)) {
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (payload === "[DONE]") break;
+          const token = JSON.parse(payload).choices?.[0]?.delta?.content ?? "";
+          if (token) {
+            watch.gotToken();
+            yield token;
+          }
+        }
+      } catch (error) {
+        if (error instanceof ServiceError) throw error;
+        if (watch.timedOut()) throw providerTimeout("OpenAI", timeoutMs);
+        throw providerError("OpenAI", error?.message ?? String(error));
+      } finally {
+        watch.stop();
       }
     },
   };

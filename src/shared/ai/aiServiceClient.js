@@ -54,14 +54,15 @@ export const createAiServiceClient = ({
   };
 
   /**
-   * POST `body` as JSON to `path` and return the parsed JSON answer.
-   * Throws AiServiceError for every failure: network, timeout, open circuit, HTTP error.
+   * Sends the request; returns the OK response (body unread) or throws AiServiceError for
+   * every failure: network, timeout, open circuit, HTTP error.
    * Only failures of the service itself count towards the circuit breaker: no answer, a
    * wrong key, or a 5xx without a known code. Errors it reports about the request (400, 413),
    * a provider (Ollama down, OpenAI failed, bad JSON), a model still loading or a full queue
    * mean the service is up, so they do not stop the other provider being tried through it.
+   * `timeoutMs: null` sets no limit (streams: the caller's `signal` decides).
    */
-  const post = async (path, body, { timeoutMs, signal, priority, requestId } = {}) => {
+  const send = async (path, body, { timeoutMs, signal, priority, requestId } = {}) => {
     const { url, key, timeoutMs: defaultTimeout } = settings();
     if (!url) throw new AiServiceError("AI_SERVICE_URL is not set", { code: "AI_SERVICE_DISABLED" });
 
@@ -71,8 +72,10 @@ export const createAiServiceClient = ({
     }
     if (halfOpen) trialInFlight = true;
 
-    const timeout = AbortSignal.timeout(timeoutMs ?? defaultTimeout);
-    const signals = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const limit = timeoutMs === null ? null : (timeoutMs ?? defaultTimeout);
+    const timeout = limit === null ? null : AbortSignal.timeout(limit);
+    const signals = [signal, timeout].filter(Boolean);
+    const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
 
     try {
       let response;
@@ -86,43 +89,52 @@ export const createAiServiceClient = ({
             ...(priority ? { "x-priority": priority } : {}),
           },
           body: JSON.stringify(body),
-          signal: signals,
+          signal: combined,
         });
       } catch (error) {
         // The caller cancelled: not the service's fault.
         if (signal?.aborted) throw error;
         recordFailure();
-        const timedOut = timeout.aborted;
+        const timedOut = Boolean(timeout?.aborted);
         throw new AiServiceError(
-          timedOut
-            ? `AI service did not answer within ${timeoutMs ?? defaultTimeout}ms`
-            : `AI service unreachable: ${error.message}`,
+          timedOut ? `AI service did not answer within ${limit}ms` : `AI service unreachable: ${error.message}`,
           { code: timedOut ? "AI_SERVICE_TIMEOUT" : "AI_SERVICE_UNAVAILABLE" },
         );
       }
 
-      const json = await response.json().catch(() => null);
       if (!response.ok) {
+        const json = await response.json().catch(() => null);
         const code = json?.error?.code;
         const serviceBroken =
           response.status === 401 || (response.status >= 500 && (!code || code === "INTERNAL"));
         if (serviceBroken) recordFailure();
         throw new AiServiceError(json?.error?.message ?? `AI service HTTP ${response.status}`, {
           status: response.status,
-          code: json?.error?.code ?? "AI_SERVICE_ERROR",
+          code: code ?? "AI_SERVICE_ERROR",
           retryAfterSec: Number(response.headers.get("retry-after")) || null,
         });
       }
       recordSuccess();
-      return json;
+      return response;
     } finally {
       if (halfOpen) trialInFlight = false;
     }
   };
 
+  /** POST `body` as JSON to `path` and return the parsed JSON answer. */
+  const post = async (path, body, options) => (await send(path, body, options)).json();
+
+  /**
+   * POST to a Server-Sent Events endpoint; resolves with the OK response to read
+   * `response.body` from. No time limit of its own: the caller's `signal` stops it.
+   */
+  const stream = (path, body, { signal, priority, requestId } = {}) =>
+    send(path, body, { timeoutMs: null, signal, priority, requestId });
+
   return {
     enabled: () => Boolean(settings().url),
     post,
+    stream,
     /** For tests and /health-style checks. */
     circuitState: () => (openUntil > now() ? "open" : openUntil > 0 ? "half-open" : "closed"),
   };

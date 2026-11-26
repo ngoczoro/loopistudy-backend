@@ -19,6 +19,42 @@ import {
 } from "./assistant.prompt.js";
 import { buildExtractiveAnswer } from "./assistant.retrieve.js";
 import { getOpenAIConfig } from "../ai/ai.constants.js";
+import { aiServiceClient } from "../../shared/ai/aiServiceClient.js";
+
+/*
+ * With AI_SERVICE_URL set, the model calls below go through the AI service
+ * (POST /v1/llm/chat and /v1/llm/chat/stream) and the service holds the Ollama URL and the
+ * OpenAI key. Everything else stays here: prompts, the Ollama → OpenAI → extractive order,
+ * refusal detection, citation clean-up, and the first-token / idle watchdog.
+ */
+const viaService = () => aiServiceClient.enabled();
+// Extra wait on our side so the service's own first-token timeout answers first.
+const SERVICE_MARGIN_MS = 5_000;
+
+const ASK_SETTINGS = {
+  ollama: { maxTokens: 512, temperature: 0.2 },
+  openai: { maxTokens: 700, temperature: 0.2 },
+};
+
+const promptsFor = (provider, { question, hits }) =>
+  provider === "ollama"
+    ? { system: buildOllamaSystemPrompt(), user: buildOllamaUserPrompt({ question, hits }) }
+    : { system: buildRagSystemPrompt(), user: buildRagUserPrompt({ question, hits }) };
+
+/** Whether the Ollama tier can run: the service decides when it is on, else OLLAMA_URL. */
+const ollamaTierAvailable = () => viaService() || Boolean(resolveOllamaBaseUrl());
+
+/** One whole answer from the service. `{ text, model }`; throws on any failure. */
+const generateWithService = async (provider, { question, hits }, timeoutMs, label) => {
+  const result = await aiServiceClient.post(
+    "/v1/llm/chat",
+    { provider, ...promptsFor(provider, { question, hits }), ...ASK_SETTINGS[provider], timeoutMs },
+    { timeoutMs: timeoutMs + SERVICE_MARGIN_MS, priority: "chat" },
+  );
+  const text = String(result?.content ?? "").trim();
+  if (!text) throw new Error(`${label} returned an empty answer`);
+  return { text, model: result.model };
+};
 
 const withTimeout = async (promiseFactory, timeoutMs, label) => {
   const controller = new AbortController();
@@ -41,7 +77,9 @@ const resolveOllamaBaseUrl = () => {
   return raw.replace(/\/$/, "");
 };
 
+/** `{ text, model }` */
 export const generateWithOllama = async ({ question, hits }) => {
+  if (viaService()) return generateWithService("ollama", { question, hits }, OLLAMA_TIMEOUT_MS, "Ollama");
   const baseUrl = resolveOllamaBaseUrl();
   if (!baseUrl) throw new Error("OLLAMA_URL is not configured");
 
@@ -84,10 +122,14 @@ export const generateWithOllama = async ({ question, hits }) => {
 
   const text = String(data?.message?.content ?? "").trim();
   if (!text) throw new Error("Ollama returned an empty answer");
-  return text;
+  return { text, model: OLLAMA_MODEL };
 };
 
+/** `{ text, model }` */
 export const generateWithOpenAI = async ({ question, hits }) => {
+  if (viaService()) {
+    return generateWithService("openai", { question, hits }, OPENAI_ASSISTANT_TIMEOUT_MS, "OpenAI");
+  }
   const { apiKey, model } = getOpenAIConfig();
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
@@ -132,7 +174,7 @@ export const generateWithOpenAI = async ({ question, hits }) => {
 
   const text = String(data?.choices?.[0]?.message?.content ?? "").trim();
   if (!text) throw new Error("OpenAI returned an empty answer");
-  return text;
+  return { text, model: model || "gpt-4.1-mini" };
 };
 
 /* ---------- Streaming ---------- */
@@ -193,7 +235,57 @@ const createTokenWatchdog = ({ firstTokenMs, idleMs, outerSignal, label }) => {
   };
 };
 
-export const streamWithOllama = async ({ question, hits, onToken, signal }) => {
+/**
+ * Stream one provider's answer through the AI service (POST /v1/llm/chat/stream, SSE:
+ * start → token… → done | error). Our watchdog still guards the first token and the gaps
+ * between tokens; `onModel` gets the model the service really runs, before the first token.
+ */
+const streamWithService = async (provider, { question, hits, onToken, onModel, signal }, firstTokenMs, label) => {
+  const watchdog = createTokenWatchdog({
+    firstTokenMs: firstTokenMs + SERVICE_MARGIN_MS,
+    idleMs: STREAM_IDLE_TIMEOUT_MS,
+    outerSignal: signal,
+    label,
+  });
+  let text = "";
+  try {
+    const response = await aiServiceClient.stream(
+      "/v1/llm/chat/stream",
+      { provider, ...promptsFor(provider, { question, hits }), ...ASK_SETTINGS[provider], timeoutMs: firstTokenMs },
+      { signal: watchdog.signal, priority: "chat" },
+    );
+
+    let event = null;
+    for await (const line of readLines(response.body)) {
+      if (line.startsWith("event:")) {
+        event = line.slice(6).trim();
+        continue;
+      }
+      if (!line.startsWith("data:")) continue;
+      const data = JSON.parse(line.slice(5).trim());
+      if (event === "start") onModel?.(data.model);
+      if (event === "token" && data.text) {
+        watchdog.tokenReceived();
+        text += data.text;
+        onToken(data.text);
+      }
+      if (event === "error") throw new Error(`${label}: ${data.message}`);
+      if (event === "done") break;
+    }
+  } catch (error) {
+    throw Object.assign(watchdog.toError(error), { emitted: text.length > 0 });
+  } finally {
+    watchdog.stop();
+  }
+
+  if (!text.trim()) throw new Error(`${label} returned an empty answer`);
+  return text.trim();
+};
+
+export const streamWithOllama = async ({ question, hits, onToken, onModel, signal }) => {
+  if (viaService()) {
+    return streamWithService("ollama", { question, hits, onToken, onModel, signal }, OLLAMA_FIRST_TOKEN_TIMEOUT_MS, "Ollama");
+  }
   const baseUrl = resolveOllamaBaseUrl();
   if (!baseUrl) throw new Error("OLLAMA_URL is not configured");
 
@@ -246,7 +338,10 @@ export const streamWithOllama = async ({ question, hits, onToken, signal }) => {
   return text.trim();
 };
 
-export const streamWithOpenAI = async ({ question, hits, onToken, signal }) => {
+export const streamWithOpenAI = async ({ question, hits, onToken, onModel, signal }) => {
+  if (viaService()) {
+    return streamWithService("openai", { question, hits, onToken, onModel, signal }, OPENAI_ASSISTANT_TIMEOUT_MS, "OpenAI");
+  }
   const { apiKey, model } = getOpenAIConfig();
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
@@ -341,12 +436,12 @@ const fallbackAfterAllTiers = (errors, hits) => {
 export const generateRagAnswer = async ({ question, hits }) => {
   const errors = [];
 
-  if (resolveOllamaBaseUrl()) {
+  if (ollamaTierAvailable()) {
     try {
-      const raw = await generateWithOllama({ question, hits });
+      const { text: raw, model } = await generateWithOllama({ question, hits });
       const { content, failure } = acceptGeneratedAnswer(raw, hits);
       if (content) {
-        return { content, provider: "ollama", model: OLLAMA_MODEL };
+        return { content, provider: "ollama", model };
       }
       errors.push(`ollama${failure}`);
       console.warn(`⚠ Ollama${failure}; trying next tier`);
@@ -359,14 +454,13 @@ export const generateRagAnswer = async ({ question, hits }) => {
   }
 
   try {
-    const raw = await generateWithOpenAI({ question, hits });
+    const { text: raw, model } = await generateWithOpenAI({ question, hits });
     const { content, failure } = acceptGeneratedAnswer(raw, hits);
     if (content) {
       return {
         content,
         provider: "openai",
-        model: getOpenAIConfig().model,
-
+        model,
         errors: errors.length ? errors : null,
       };
     }
@@ -410,7 +504,7 @@ export const streamRagAnswer = async ({
   };
 
   const tiers = [];
-  if (resolveOllamaBaseUrl()) {
+  if (ollamaTierAvailable()) {
     tiers.push({ provider: "ollama", model: OLLAMA_MODEL, run: streamWithOllama });
   } else {
     errors.push("ollama: OLLAMA_URL empty");
@@ -419,14 +513,18 @@ export const streamRagAnswer = async ({
 
   for (const tier of tiers) {
     try {
-      const emit = emitFrom({ provider: tier.provider, model: tier.model });
-      const raw = await tier.run({ question, hits, onToken: emit, signal });
+      // Through the AI service, the `start` event names the model it really runs.
+      const source = { provider: tier.provider, model: tier.model };
+      const onModel = (model) => {
+        if (model) source.model = model;
+      };
+      const raw = await tier.run({ question, hits, onToken: emitFrom(source), onModel, signal });
       const { content, failure } = acceptGeneratedAnswer(raw, hits);
       if (content) {
         return {
           content,
           provider: tier.provider,
-          model: tier.model,
+          model: source.model,
           errors: errors.length ? errors : null,
         };
       }

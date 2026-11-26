@@ -11,7 +11,7 @@ Service chỉ được dùng khi backend có biến `AI_SERVICE_URL`. Khi biến
 | 1 | Khung service: `/health`, `/info`, xác thực, log, Docker | Xong |
 | 2 | `POST /v1/embed` | Xong |
 | 3 | `POST /v1/llm/json` | Xong |
-| 4 | `POST /v1/llm/chat`, `/v1/llm/chat/stream` | Chưa làm |
+| 4 | `POST /v1/llm/chat`, `/v1/llm/chat/stream` | Xong |
 | 5 | Hàng đợi Ollama | Chưa làm |
 
 ## Chạy

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { invalidRequest } from "../errors.js";
+import { ServiceError, invalidRequest } from "../errors.js";
 
 const PROVIDERS = new Set(["ollama", "openai"]);
 const MAX_TIMEOUT_MS = 120_000;
@@ -19,19 +19,24 @@ const requiredText = (value, name) => {
   return value;
 };
 
-const readJsonRequest = (body = {}) => {
+/** Fields every LLM endpoint takes; `defaults` differ (JSON for quizzes, chat for Ask AI). */
+const readCommon = (body, defaults) => {
   if (!PROVIDERS.has(body.provider)) throw invalidRequest('provider must be "ollama" or "openai"');
-  const schema = body.schema ?? null;
-  if (schema !== null && (typeof schema !== "object" || Array.isArray(schema))) {
-    throw invalidRequest("schema must be a JSON Schema object or null");
-  }
   return {
     provider: body.provider,
     system: requiredText(body.system, "system"),
     user: requiredText(body.user, "user"),
-    schema,
-    maxTokens: optionalNumber(body.maxTokens, "maxTokens", { fallback: 800, min: 1, max: MAX_TOKENS, integer: true }),
-    temperature: optionalNumber(body.temperature, "temperature", { fallback: 0.4, min: 0, max: 2 }),
+    maxTokens: optionalNumber(body.maxTokens, "maxTokens", {
+      fallback: defaults.maxTokens,
+      min: 1,
+      max: MAX_TOKENS,
+      integer: true,
+    }),
+    temperature: optionalNumber(body.temperature, "temperature", {
+      fallback: defaults.temperature,
+      min: 0,
+      max: 2,
+    }),
     timeoutMs: optionalNumber(body.timeoutMs, "timeoutMs", {
       fallback: 60_000,
       min: 1,
@@ -40,6 +45,20 @@ const readJsonRequest = (body = {}) => {
     }),
   };
 };
+
+const readJsonRequest = (body = {}) => {
+  const schema = body.schema ?? null;
+  const common = readCommon(body, { maxTokens: 800, temperature: 0.4 });
+  if (schema !== null && (typeof schema !== "object" || Array.isArray(schema))) {
+    throw invalidRequest("schema must be a JSON Schema object or null");
+  }
+  return { ...common, schema };
+};
+
+// Ask AI's settings in the backend: Ollama num_predict 512, temperature 0.2.
+const readChatRequest = (body = {}) => readCommon(body, { maxTokens: 512, temperature: 0.2 });
+
+const sendEvent = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
 /** Aborts when the backend closes the connection before the answer is sent. */
 const abortOnClose = (req, res) => {
@@ -50,7 +69,10 @@ const abortOnClose = (req, res) => {
   return controller.signal;
 };
 
-/** POST /v1/llm/json (API.md). Calls only the provider asked for; the backend picks the order. */
+/**
+ * POST /v1/llm/json, /v1/llm/chat and /v1/llm/chat/stream (API.md).
+ * Each calls only the provider asked for; the backend picks the order and judges the answer.
+ */
 export const llmRouter = ({ providers }) => {
   const router = Router();
 
@@ -62,6 +84,59 @@ export const llmRouter = ({ providers }) => {
       signal: abortOnClose(req, res),
     });
     res.json({ provider: request.provider, model, json, durationMs: Date.now() - started });
+  });
+
+  router.post("/v1/llm/chat", async (req, res) => {
+    const request = readChatRequest(req.body);
+    const started = Date.now();
+    const { model, content } = await providers[request.provider].chat({
+      ...request,
+      signal: abortOnClose(req, res),
+    });
+    res.json({ provider: request.provider, model, content, durationMs: Date.now() - started });
+  });
+
+  /**
+   * Nothing is sent until the first token: an error before it is a normal JSON error
+   * (the backend tries its next provider), after it an `error` event ends the stream.
+   * Closing the connection cancels the provider call.
+   */
+  router.post("/v1/llm/chat/stream", async (req, res) => {
+    const request = readChatRequest(req.body);
+    const provider = providers[request.provider];
+    const signal = abortOnClose(req, res);
+    const started = Date.now();
+    let tokens = 0;
+
+    try {
+      for await (const text of provider.stream({ ...request, signal })) {
+        if (tokens === 0) {
+          res.status(200).set({
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no",
+          });
+          res.flushHeaders();
+          sendEvent(res, "start", { provider: request.provider, model: provider.model });
+        }
+        tokens += 1;
+        sendEvent(res, "token", { text });
+      }
+    } catch (error) {
+      if (tokens === 0) throw error; // still a plain HTTP error
+      if (!signal.aborted) {
+        sendEvent(res, "error", { code: error.code ?? "INTERNAL", message: error.message });
+      }
+      res.end();
+      return;
+    }
+
+    if (tokens === 0) {
+      throw new ServiceError(502, "INVALID_MODEL_OUTPUT", `${request.provider} returned an empty answer`);
+    }
+    sendEvent(res, "done", { durationMs: Date.now() - started, tokens });
+    res.end();
   });
 
   return router;

@@ -207,6 +207,8 @@ data: {"durationMs":21000,"tokens":142}
 
 - `start` được gửi **khi token đầu tiên sắp đến**, ngay trước `token` đầu tiên, không gửi lúc vừa nhận request. Nhờ vậy backend giữ nguyên cách gọi `onProvider` hiện tại.
 - Lỗi **trước** token đầu tiên: service trả mã HTTP lỗi và body JSON như phần "Định dạng lỗi", không mở stream.
+- Provider kết thúc mà không gửi token nào: service trả `502 INVALID_MODEL_OUTPUT` dạng JSON, không mở stream.
+- Mặc định của chat: `maxTokens` 512, `temperature` 0.2. Backend gửi 700 token cho OpenAI, giống như trước khi tách.
 - Lỗi **sau** khi đã stream: service gửi `event: error` với `data: {"code":"...","message":"..."}`, rồi đóng kết nối. Backend xử lý như lỗi giữa chừng hiện tại: gửi `reset` cho frontend, rồi thử provider tiếp theo.
 - **Hủy giữa chừng:** backend đóng kết nối, ví dụ khi người dùng đóng tab. Service phải hủy request tới Ollama hoặc OpenAI ngay lập tức.
 - Thời gian chờ giữa hai token (`STREAM_IDLE_TIMEOUT_MS`) vẫn do backend kiểm soát.
