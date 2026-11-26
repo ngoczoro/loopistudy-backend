@@ -60,6 +60,7 @@ export const NOTIFICATION_TYPES = [
   "group_task_due_soon",
   "group_task_overdue",
   "group_task_blocked",
+  "group_call_started",
 ];
 
 export const VIOLATION_TYPES = ["spam", "inappropriate", "irrelevant"];

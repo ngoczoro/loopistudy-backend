@@ -51,6 +51,7 @@ const fakeStore = (initial = {}) => {
       rows.set(groupId, { ...row, callStartedAt: null, callStartedBy: null });
       return true;
     }),
+    endCallNotifications: jest.fn(async () => {}),
     findCallRecipients: jest.fn(async () => [
       { userId: STARTER, muted: false },
       { userId: MEMBER, muted: false },
@@ -68,6 +69,7 @@ const setup = ({ servers = [PRIMARY], clients = {}, row = {}, configured = true 
   const store = fakeStore(row);
   const emit = jest.fn();
   const postChatMessage = jest.fn(async () => ({}));
+  const createNotification = jest.fn(async () => ({}));
   const timers = [];
   const sessions = createCallSessions({
     getConfig: () => ({ configured, servers }),
@@ -76,11 +78,12 @@ const setup = ({ servers = [PRIMARY], clients = {}, row = {}, configured = true 
     findUser: jest.fn(async (id) => ({ id, fullName: "Như Quỳnh" })),
     emit,
     postChatMessage,
+    createNotification,
     now: () => clock.now,
     setTimer: (fn, ms) => timers.push({ fn, ms }),
     logger: { error: jest.fn() },
   });
-  return { sessions, clients: clientById, store, emit, postChatMessage, timers, clock };
+  return { sessions, clients: clientById, store, emit, postChatMessage, createNotification, timers, clock };
 };
 
 const eventsNamed = (emit, name) => emit.mock.calls.filter(([, event]) => event === name);
@@ -106,11 +109,11 @@ describe("confirmStart", () => {
       callStartedAt: new Date(START),
       callStartedBy: STARTER,
     });
-    expect(ctx.postChatMessage).toHaveBeenCalledWith(
-      STARTER,
-      GROUP_ID,
-      expect.stringContaining("Started a group call"),
-    );
+    expect(ctx.postChatMessage).toHaveBeenCalledWith(STARTER, GROUP_ID, {
+      kind: "call_started",
+      content: "Started a group call",
+      metadata: { startedAt: new Date(START).toISOString() },
+    });
 
     const started = eventsNamed(ctx.emit, "call:started");
     expect(started.map(([room]) => room)).toEqual([
@@ -141,6 +144,33 @@ describe("confirmStart", () => {
       [`user:${MEMBER}`]: true,
       [`user:${MUTED}`]: false,
     });
+  });
+
+  it("saves a notification for the same people the toast goes to", async () => {
+    const ctx = setup({
+      clients: { primary: fakeClient({ participants: [participant(STARTER)] }) },
+    });
+    await ctx.sessions.confirmStart(GROUP_ID);
+
+    expect(ctx.createNotification).toHaveBeenCalledTimes(1);
+    expect(ctx.createNotification).toHaveBeenCalledWith(MEMBER, {
+      type: "group_call_started",
+      title: "Như Quỳnh started a call",
+      body: "in SE345",
+      metadata: { groupId: GROUP_ID, groupName: "SE345", startedAt: new Date(START).toISOString() },
+    });
+    // Saved before the event, so a member refreshing on `call:started` already sees it.
+    const firstEmit = ctx.emit.mock.invocationCallOrder[0];
+    expect(ctx.createNotification.mock.invocationCallOrder[0]).toBeLessThan(firstEmit);
+  });
+
+  it("still tells the group when a notification cannot be saved", async () => {
+    const ctx = setup({
+      clients: { primary: fakeClient({ participants: [participant(STARTER)] }) },
+    });
+    ctx.createNotification.mockRejectedValueOnce(new Error("db down"));
+    await expect(ctx.sessions.confirmStart(GROUP_ID)).resolves.toBe(true);
+    expect(eventsNamed(ctx.emit, "call:started")).toHaveLength(3);
   });
 
   it("announces a call only once", async () => {
@@ -255,7 +285,12 @@ describe("sweep", () => {
     expect(ctx.store.rows.get(GROUP_ID).callStartedAt).toBeNull();
 
     // Measured until the room was first seen empty, not until the grace time ran out.
-    expect(ctx.postChatMessage).toHaveBeenCalledWith(STARTER, GROUP_ID, "📹 Call ended · 23 min");
+    expect(ctx.postChatMessage).toHaveBeenCalledWith(STARTER, GROUP_ID, {
+      kind: "call_ended",
+      content: "Call ended · 23 min",
+      metadata: { startedAt: new Date(START).toISOString(), durationMs: 23 * MINUTE },
+    });
+    expect(ctx.store.endCallNotifications).toHaveBeenCalledWith(GROUP_ID, new Date(START + 23 * MINUTE));
     const ended = eventsNamed(ctx.emit, "call:ended");
     expect(ended).toHaveLength(3);
     expect(ended[0][2]).toMatchObject({ groupId: GROUP_ID, durationMs: 23 * MINUTE, notify: false });
@@ -310,6 +345,59 @@ describe("sweep", () => {
     await ctx.sessions.sweep();
 
     expect(ctx.store.clearCallStart).toHaveBeenCalledTimes(1);
+    expect(ctx.postChatMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("endIfEmpty", () => {
+  const inCall = { callStartedAt: new Date(START), callStartedBy: STARTER };
+
+  it("ends the call at once when the last person leaves", async () => {
+    // LiveKit can still list the person who just left.
+    const ctx = setup({ clients: { primary: fakeClient({ participants: [participant(STARTER)] }) }, row: inCall });
+    ctx.clock.now = START + 5 * MINUTE;
+
+    await expect(ctx.sessions.endIfEmpty(GROUP_ID, { leavingIdentity: STARTER })).resolves.toBe(true);
+
+    expect(ctx.store.rows.get(GROUP_ID).callStartedAt).toBeNull();
+    expect(ctx.postChatMessage).toHaveBeenCalledWith(STARTER, GROUP_ID, expect.objectContaining({
+      kind: "call_ended",
+      content: "Call ended · 5 min",
+    }));
+    expect(eventsNamed(ctx.emit, "call:ended")).toHaveLength(3);
+  });
+
+  it("keeps the call going while someone else is still in it", async () => {
+    const ctx = setup({
+      clients: { primary: fakeClient({ participants: [participant(STARTER), participant(MEMBER)] }) },
+      row: inCall,
+    });
+    await expect(ctx.sessions.endIfEmpty(GROUP_ID, { leavingIdentity: STARTER })).resolves.toBe(false);
+    expect(ctx.store.clearCallStart).not.toHaveBeenCalled();
+  });
+
+  it("counts people on the fallback server too", async () => {
+    const ctx = setup({
+      servers: [PRIMARY, FALLBACK],
+      clients: { primary: fakeClient(), fallback: fakeClient({ participants: [participant(MEMBER)] }) },
+      row: inCall,
+    });
+    await expect(ctx.sessions.endIfEmpty(GROUP_ID, { leavingIdentity: STARTER })).resolves.toBe(false);
+  });
+
+  it("waits for the sweep when a server cannot be asked", async () => {
+    const ctx = setup({
+      servers: [PRIMARY, FALLBACK],
+      clients: { primary: fakeClient(), fallback: fakeClient({ down: true }) },
+      row: inCall,
+    });
+    await expect(ctx.sessions.endIfEmpty(GROUP_ID, { leavingIdentity: STARTER })).resolves.toBe(false);
+    expect(ctx.store.clearCallStart).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when no call is recorded", async () => {
+    const ctx = setup();
+    await expect(ctx.sessions.endIfEmpty(GROUP_ID, { leavingIdentity: STARTER })).resolves.toBe(false);
     expect(ctx.postChatMessage).not.toHaveBeenCalled();
   });
 });

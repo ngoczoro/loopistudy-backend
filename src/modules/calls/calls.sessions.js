@@ -1,5 +1,6 @@
 import { emitToRoom, userRoom } from "../../shared/realtime/socket.js";
-import { sendMessage } from "../groups/messages.service.js";
+import * as notificationService from "../../services/notificationService.js";
+import { postCallMessage } from "../groups/messages.service.js";
 import { findUserById } from "../users/user.repository.js";
 import { readCallsConfig } from "./calls.config.js";
 import { collectParticipants, getLivekitClient } from "./calls.livekit.js";
@@ -30,10 +31,13 @@ const startedAtMs = (row) => new Date(row.callStartedAt).getTime();
 
 /**
  * Tells a group when its Loopi call starts and ends:
- *   - start: the first person joins an empty room → one chat message and a
- *     `call:started` event to every member (a toast unless they muted the group).
- *   - end: the room stays empty for CALL_END_GRACE_MS → a chat message with the
- *     duration and `call:ended`.
+ *   - start: the first person joins an empty room → a "call started" chat card, a
+ *     notification for every member except the starter and those who muted the group,
+ *     and a `call:started` event to every member (a toast for the same people).
+ *   - end: the room stays empty for CALL_END_GRACE_MS → a "call ended" card with the
+ *     duration, the notifications marked as over, and `call:ended`. When the last person
+ *     leaves with the Leave button (`endIfEmpty`), it ends right away: the grace time
+ *     only exists for dropped connections, which may come back.
  *
  * Starts are noticed from a check shortly after a token is issued, from LiveKit
  * webhooks, and from a periodic sweep, so it also works where webhooks cannot reach
@@ -45,7 +49,8 @@ export const createCallSessions = ({
   store = callsRepository,
   findUser = findUserById,
   emit = emitToRoom,
-  postChatMessage = (userId, groupId, content) => sendMessage(userId, groupId, { content }),
+  postChatMessage = postCallMessage,
+  createNotification = notificationService.create,
   now = () => Date.now(),
   setTimer = (fn, ms) => setTimeout(fn, ms).unref?.(),
   logger = console,
@@ -58,30 +63,50 @@ export const createCallSessions = ({
 
   const logError = (message, error) => logger.error?.(`[calls] ${message}`, error?.message ?? error);
 
-  const postSafely = async (userId, groupId, content) => {
+  const postSafely = async (userId, groupId, message) => {
     if (!isUuid(userId)) return;
     try {
-      await postChatMessage(userId, groupId, content);
+      await postChatMessage(userId, groupId, message);
     } catch (error) {
       logError("Could not post the call message to chat:", error);
     }
   };
 
-  const notifyMembers = async (groupId, event, payload, { skipUserId = null } = {}) => {
-    let members = [];
+  const loadRecipients = async (groupId) => {
     try {
-      members = await store.findCallRecipients(groupId);
+      return await store.findCallRecipients(groupId);
     } catch (error) {
       logError("Could not load the group's members:", error);
-      return;
+      return [];
     }
+  };
+
+  /** Muted members and the person who started still see the dot, but are not notified. */
+  const shouldNotify = (member, skipUserId) =>
+    String(member.userId) !== skipUserId && !member.muted;
+
+  const emitToMembers = (members, event, payload, { skipUserId = null } = {}) => {
     for (const member of members) {
-      const userId = String(member.userId);
-      emit(userRoom(userId), event, {
+      emit(userRoom(String(member.userId)), event, {
         ...payload,
-        // Muted members and the person who started still see the dot, but no toast.
-        notify: event === CALL_STARTED_EVENT && userId !== skipUserId && !member.muted,
+        notify: event === CALL_STARTED_EVENT && shouldNotify(member, skipUserId),
       });
+    }
+  };
+
+  const createStartNotifications = async (members, skipUserId, { groupId, groupName, who, startedAt }) => {
+    for (const member of members) {
+      if (!shouldNotify(member, skipUserId)) continue;
+      try {
+        await createNotification(String(member.userId), {
+          type: "group_call_started",
+          title: `${who} started a call`.slice(0, 200),
+          body: groupName ? `in ${groupName}` : null,
+          metadata: { groupId, groupName, startedAt },
+        });
+      } catch (error) {
+        logError("Could not save the call notification:", error);
+      }
     }
   };
 
@@ -128,16 +153,26 @@ export const createCallSessions = ({
       emptySince.delete(groupId);
 
       const user = userId ? await findUser(userId).catch(() => null) : null;
-      await postSafely(userId, groupId, "📹 Started a group call. Join from the video call button.");
-      await notifyMembers(
+      const startedBy = user ? { userId: String(user.id), fullName: user.fullName || "Member" } : null;
+      const groupName = state.name ?? null;
+      await postSafely(userId, groupId, {
+        kind: "call_started",
+        content: "Started a group call",
+        metadata: { startedAt: startedAt.toISOString() },
+      });
+
+      // Notifications are saved before the event, so a member refreshing on it sees them.
+      const members = await loadRecipients(groupId);
+      await createStartNotifications(members, userId, {
         groupId,
+        groupName,
+        who: startedBy?.fullName ?? "Someone",
+        startedAt: startedAt.toISOString(),
+      });
+      emitToMembers(
+        members,
         CALL_STARTED_EVENT,
-        {
-          groupId,
-          groupName: state.name ?? null,
-          startedBy: user ? { userId: String(user.id), fullName: user.fullName || "Member" } : null,
-          startedAt: startedAt.toISOString(),
-        },
+        { groupId, groupName, startedBy, startedAt: startedAt.toISOString() },
         { skipUserId: userId },
       );
       return true;
@@ -161,13 +196,51 @@ export const createCallSessions = ({
 
     const durationMs = endedAtMs - startedAtMs(row);
     const starterId = row.callStartedBy ? String(row.callStartedBy) : null;
-    await postSafely(starterId, row.id, `📹 Call ended · ${formatCallDuration(durationMs)}`);
-    await notifyMembers(row.id, CALL_ENDED_EVENT, {
+    await postSafely(starterId, row.id, {
+      kind: "call_ended",
+      content: `Call ended · ${formatCallDuration(durationMs)}`,
+      metadata: { startedAt: new Date(row.callStartedAt).toISOString(), durationMs },
+    });
+    try {
+      await store.endCallNotifications(row.id, new Date(endedAtMs));
+    } catch (error) {
+      logError("Could not mark the call notifications as ended:", error);
+    }
+    emitToMembers(await loadRecipients(row.id), CALL_ENDED_EVENT, {
       groupId: row.id,
       endedAt: new Date(endedAtMs).toISOString(),
       durationMs,
     });
     return true;
+  };
+
+  /**
+   * Ends the call now if nobody but `leavingIdentity` is left in the room. Called when
+   * someone leaves on purpose; LiveKit may still list them for a moment, so they are
+   * not counted. Does nothing while any server cannot be asked, since its room may
+   * still be busy (the sweep ends the call later).
+   */
+  const endIfEmpty = async (groupId, { leavingIdentity = null } = {}) => {
+    const config = getConfig();
+    if (!config.configured) return false;
+    try {
+      const row = await store.findCallState(groupId);
+      if (!row?.callStartedAt) return false;
+
+      const roomName = roomNameForGroup(groupId);
+      const results = await Promise.allSettled(
+        config.servers.map((server) => getClient(server).listParticipants(roomName)),
+      );
+      if (results.some((result) => result.status === "rejected")) return false;
+      const others = activeParticipants(results.flatMap((result) => result.value)).filter(
+        (participant) => participant.identity !== leavingIdentity,
+      );
+      if (others.length > 0) return false;
+      return await finish(row, now());
+    } catch (error) {
+      logError("Could not end the call after the last person left:", error);
+      return false;
+    }
   };
 
   /**
@@ -233,7 +306,7 @@ export const createCallSessions = ({
     interval = null;
   };
 
-  return { confirmStart, scheduleStartCheck, sweep, start, stop };
+  return { confirmStart, scheduleStartCheck, endIfEmpty, sweep, start, stop };
 };
 
 export const callSessions = createCallSessions();

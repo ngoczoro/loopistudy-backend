@@ -30,6 +30,7 @@ import { up as assistantContentHashWidth } from "./024_assistant_content_hash_wi
 import { up as documentChunksSearchTsv } from "./025_document_chunks_search_tsv.js";
 import { up as groupCallMeet } from "./026_group_call_meet.js";
 import { up as groupCallSessions } from "./027_group_call_sessions.js";
+import { up as groupCallMessages } from "./028_group_call_messages.js";
 
 const schema = () => process.env.DB_SCHEMA || "learning_app";
 
@@ -63,6 +64,7 @@ const migrations = [
   { name: "025_document_chunks_search_tsv", up: documentChunksSearchTsv },
   { name: "026_group_call_meet", up: groupCallMeet },
   { name: "027_group_call_sessions", up: groupCallSessions },
+  { name: "028_group_call_messages", up: groupCallMessages },
 ];
 const ensureMigrationsTable = async () => {
   const s = schema();

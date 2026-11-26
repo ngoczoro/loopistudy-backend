@@ -12,6 +12,11 @@ export const getStatus = asyncHandler(async (req, res) => {
   res.json(buildSuccessResponse("Call status fetched successfully", data));
 });
 
+export const leaveCall = asyncHandler(async (req, res) => {
+  const data = await callsService.leaveCall(req.user.userId, req.params.groupId);
+  res.json(buildSuccessResponse("Left the call", data));
+});
+
 export const startMeet = asyncHandler(async (req, res) => {
   const data = await callsService.startMeet(req.user.userId, req.params.groupId);
   res.status(data.created ? 201 : 200).json(buildSuccessResponse("Google Meet ready", data));

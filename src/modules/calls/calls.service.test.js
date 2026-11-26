@@ -75,7 +75,11 @@ const setup = ({
   const meetStore = fakeMeetStore(clock, meetRow);
   const emit = jest.fn();
   const postChatMessage = jest.fn(async () => ({}));
-  const sessions = { scheduleStartCheck: jest.fn(), confirmStart: jest.fn(async () => false) };
+  const sessions = {
+    scheduleStartCheck: jest.fn(),
+    confirmStart: jest.fn(async () => false),
+    endIfEmpty: jest.fn(async () => true),
+  };
   const service = createCallsService({
     getConfig: () => ({
       configured: servers.length > 0,
@@ -443,7 +447,11 @@ describe("startMeet (Google Meet API)", () => {
       userId: "u1",
       expiredBefore: new Date(START - 3 * HOUR),
     });
-    expect(postChatMessage).toHaveBeenCalledWith("u1", GROUP_ID, expect.stringContaining("https://meet.google.com/abc-defg-hij"));
+    expect(postChatMessage).toHaveBeenCalledWith("u1", GROUP_ID, {
+      kind: "meet",
+      content: "Google Meet: https://meet.google.com/abc-defg-hij",
+      metadata: { url: "https://meet.google.com/abc-defg-hij" },
+    });
     expect(emit.mock.calls.at(-1)[2].meet.url).toBe("https://meet.google.com/abc-defg-hij");
   });
 
@@ -513,5 +521,22 @@ describe("shareMeet and endMeet", () => {
     const { service } = setup({ membership: forbidden() });
     await expectCallError(service.shareMeet("u1", GROUP_ID, "https://meet.google.com/abc-defg-hij"), 403);
     await expectCallError(service.endMeet("u1", GROUP_ID), 403);
+  });
+});
+
+describe("leaveCall", () => {
+  it("asks the sessions to end the call, not counting the person who left", async () => {
+    const { service, sessions } = setup();
+    await expect(service.leaveCall("u1", GROUP_ID)).resolves.toEqual({ ended: true });
+    expect(sessions.endIfEmpty).toHaveBeenCalledWith(GROUP_ID, { leavingIdentity: "u1" });
+  });
+
+  it("rejects people outside the group", async () => {
+    const membership = jest.fn(async () => {
+      throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+    });
+    const { service, sessions } = setup({ membership });
+    await expect(service.leaveCall("u9", GROUP_ID)).rejects.toMatchObject({ statusCode: 403 });
+    expect(sessions.endIfEmpty).not.toHaveBeenCalled();
   });
 });

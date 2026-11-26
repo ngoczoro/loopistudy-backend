@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import sequelize from "../../config/database.js";
+import { SCHEMA } from "../../models/shared.js";
 
 const StudyGroup = () => sequelize.models.StudyGroup;
 
@@ -62,6 +63,19 @@ export const clearCallStart = async (groupId, startedAt) => {
     { where: { id: groupId, callStartedAt: startedAt } },
   );
   return count > 0;
+};
+
+/** Marks the group's "call started" notifications as over, so they no longer offer to join. */
+export const endCallNotifications = async (groupId, endedAt) => {
+  await sequelize.query(
+    `UPDATE "${SCHEMA}"."notifications"
+        SET metadata = metadata || jsonb_build_object('endedAt', CAST(:endedAt AS text)),
+            body = COALESCE(body, '') || ' · Call ended'
+      WHERE type = 'group_call_started'
+        AND metadata->>'groupId' = :groupId
+        AND metadata->>'endedAt' IS NULL`,
+    { replacements: { groupId: String(groupId), endedAt: endedAt.toISOString() } },
+  );
 };
 
 /** Members to tell about the call, with their mute setting. */

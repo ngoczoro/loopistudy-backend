@@ -2,7 +2,14 @@ import { Router } from "express";
 import Joi from "joi";
 import { verifyTokenMiddleware } from "../../middlewares/authMiddleware.js";
 import { validateBody } from "../../validations/schemas.js";
-import { endMeet, getStatus, issueToken, shareMeet, startMeet } from "./calls.controller.js";
+import {
+  endMeet,
+  getStatus,
+  issueToken,
+  leaveCall,
+  shareMeet,
+  startMeet,
+} from "./calls.controller.js";
 
 const groupIdParamSchema = Joi.object({
   groupId: Joi.string().uuid().required(),
@@ -32,6 +39,8 @@ router.use(validateGroupId);
 
 router.get("/", getStatus);
 router.post("/token", issueToken);
+// Sent when someone presses Leave, so the last one out ends the call right away.
+router.post("/leave", leaveCall);
 
 // Google Meet fallback: create through the API, share a pasted link, or end it.
 router.post("/meet", startMeet);

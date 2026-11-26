@@ -1,7 +1,7 @@
 import ApiError from "../../utils/ApiError.js";
 import { emitToRoom, groupRoom } from "../../shared/realtime/socket.js";
 import { getMembershipOrThrow } from "../groups/groups.access.js";
-import { sendMessage } from "../groups/messages.service.js";
+import { postCallMessage } from "../groups/messages.service.js";
 import { findUserById } from "../users/user.repository.js";
 import { readCallsConfig } from "./calls.config.js";
 import { collectParticipants as collectFromServers, getLivekitClient } from "./calls.livekit.js";
@@ -45,7 +45,7 @@ export const createCallsService = ({
   emit = emitToRoom,
   meetStore = callsRepository,
   getMeetClient = getGoogleMeetClient,
-  postChatMessage = (userId, groupId, content) => sendMessage(userId, groupId, { content }),
+  postChatMessage = postCallMessage,
   sessions = callSessions,
   now = () => Date.now(),
   logger = console,
@@ -270,7 +270,11 @@ export const createCallsService = ({
     });
     if (claimed) {
       try {
-        await postChatMessage(userId, groupId, `📹 Google Meet cho nhóm: ${url}`);
+        await postChatMessage(userId, groupId, {
+          kind: "meet",
+          content: `Google Meet: ${url}`,
+          metadata: { url },
+        });
       } catch (error) {
         logger.error?.("[calls] Could not post the Meet link to chat:", error?.message ?? error);
       }
@@ -346,7 +350,17 @@ export const createCallsService = ({
     return broadcastStatus(groupId);
   };
 
-  return { issueToken, getCallStatus, receiveWebhook, startMeet, shareMeet, endMeet };
+  /**
+   * The user pressed Leave. If they were the last one in, the call ends now instead of
+   * after the grace time kept for dropped connections.
+   */
+  const leaveCall = async (userId, groupId) => {
+    await getMembership(groupId, userId);
+    const ended = await sessions.endIfEmpty(groupId, { leavingIdentity: String(userId) });
+    return { ended };
+  };
+
+  return { issueToken, getCallStatus, receiveWebhook, startMeet, shareMeet, endMeet, leaveCall };
 };
 
 export const callsService = createCallsService();

@@ -69,13 +69,18 @@ describe("POST /api/v1/calls/livekit-webhook", () => {
   });
 
   it("returns 503 when LiveKit is not configured", async () => {
-    const secret = process.env.LIVEKIT_API_SECRET;
-    delete process.env.LIVEKIT_API_SECRET;
+    // Neither the main server nor a fallback one (a local .env may set both).
+    const names = ["LIVEKIT_API_SECRET", "LIVEKIT_FALLBACK_API_SECRET"];
+    const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    names.forEach((name) => delete process.env[name]);
     try {
       const res = await send("{}");
       expect(res.status).toBe(503);
     } finally {
-      process.env.LIVEKIT_API_SECRET = secret;
+      names.forEach((name) => {
+        if (saved[name] === undefined) delete process.env[name];
+        else process.env[name] = saved[name];
+      });
     }
   });
 });
