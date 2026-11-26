@@ -8,3 +8,5 @@ npm-debug.log
 .DS_Store
 uploads/
 backups/
+# Load test runs (keep the ones for the report with git add -f)
+scripts/load/results/
