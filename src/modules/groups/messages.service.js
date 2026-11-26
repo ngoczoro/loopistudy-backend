@@ -195,6 +195,30 @@ export const sendMessage = async (userId, groupId, payload = {}, files = []) => 
   }
 };
 
+/** Call messages a member's chat shows as call cards; never sent by the chat API itself. */
+export const CALL_MESSAGE_KINDS = new Set(["call_started", "call_ended", "meet"]);
+
+/**
+ * Posts a message from the call system (call started or ended, a Meet link) in the
+ * name of `userId`, who must be a member. `kind` tells chat to show it as a call card.
+ */
+export const postCallMessage = async (userId, groupId, { kind, content, metadata = null }) => {
+  if (!CALL_MESSAGE_KINDS.has(kind)) throw new Error(`Unknown call message kind: ${kind}`);
+  const membership = await getMembershipOrThrow(groupId, userId);
+  const message = await messagesRepository.createMessage({
+    groupId,
+    senderId: userId,
+    content: String(content ?? "").slice(0, CHAT_MAX_CONTENT_LENGTH),
+    kind,
+    metadata,
+  });
+  await groupsRepository.updateMembership(membership, { lastReadAt: message.createdAt });
+
+  const view = serializeMessage(await messagesRepository.findMessageById(message.id));
+  emitToRoom(groupRoom(groupId), "chat:message", view);
+  return view;
+};
+
 export const markRead = async (userId, groupId) => {
   const membership = await getMembershipOrThrow(groupId, userId);
   const lastReadAt = new Date();

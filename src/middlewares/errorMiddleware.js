@@ -55,6 +55,10 @@ export const errorMiddleware = (err, req, res, next) => {
     message,
     errors:
       process.env.NODE_ENV === "development" ? errors || err.message : null,
+    // Machine-readable reason and extra data the client acts on (e.g. a call fallback).
+    // Only from ApiError, so system error codes such as ECONNREFUSED never leak.
+    ...(err instanceof ApiError && err.code ? { code: err.code } : {}),
+    ...(err instanceof ApiError && err.details ? { details: err.details } : {}),
   });
 };
 

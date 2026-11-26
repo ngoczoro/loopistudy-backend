@@ -62,10 +62,17 @@ export const findMessageById = async (messageId) =>
     include: [senderInclude(), attachmentsInclude()],
   });
 
-export const createMessage = async ({ groupId, senderId, content, attachments }) =>
+export const createMessage = async ({
+  groupId,
+  senderId,
+  content,
+  attachments = [],
+  kind = "text",
+  metadata = null,
+}) =>
   sequelize.transaction(async (transaction) => {
     const message = await GroupMessage().create(
-      { groupId, senderId, content },
+      { groupId, senderId, content, kind, metadata },
       { transaction },
     );
     if (attachments.length > 0) {

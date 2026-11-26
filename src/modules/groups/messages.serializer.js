@@ -16,6 +16,8 @@ export const serializeMessage = (message) => ({
   groupId: message.groupId,
   sender: serializeUserSummary(message.sender),
   content: message.content ?? "",
+  kind: message.kind ?? "text",
+  metadata: message.metadata ?? null,
   attachments: (message.attachments ?? []).map(serializeAttachment),
   createdAt: toIso(message.createdAt),
 });
