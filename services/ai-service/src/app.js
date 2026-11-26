@@ -14,19 +14,18 @@ const { version } = JSON.parse(readFileSync(new URL("../package.json", import.me
  * Builds the Express app without listening, so tests can drive it with supertest.
  * Only /health is open; everything mounted after the key check needs `x-internal-key`.
  */
-export const createApp = ({ config, logger, status, embedder, providers }) => {
+export const createApp = ({ config, logger, status, embedder, providers, queue = null }) => {
   const app = express();
   app.disable("x-powered-by");
   app.use(requestLog(logger));
   app.use(express.json({ limit: "5mb" }));
 
-  app.use(healthRouter({ status }));
+  app.use(healthRouter({ status, queue }));
 
   app.use(requireInternalKey(config.key));
   app.use(infoRouter({ config, version }));
   if (embedder) app.use(embedRouter({ embedder }));
   if (providers) app.use(llmRouter({ providers }));
-  // Phase 4: /v1/llm/chat and /v1/llm/chat/stream join llmRouter.
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

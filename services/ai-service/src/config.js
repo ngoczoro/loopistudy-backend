@@ -37,8 +37,9 @@ export const loadConfig = (env = process.env) => {
         .replace(/\/$/, ""),
       model: text(env.OLLAMA_MODEL, "qwen2.5:3b"),
       keepAlive: text(env.OLLAMA_KEEP_ALIVE, "30m"),
-      concurrency: number(env.OLLAMA_CONCURRENCY, 1, "OLLAMA_CONCURRENCY"),
+      concurrency: Math.max(1, number(env.OLLAMA_CONCURRENCY, 1, "OLLAMA_CONCURRENCY")),
       maxQueue: number(env.OLLAMA_MAX_QUEUE, 3, "OLLAMA_MAX_QUEUE"),
+      warmUp: text(env.OLLAMA_WARMUP, "true") !== "false",
     }),
     openai: Object.freeze({
       apiKey: text(env.OPENAI_API_KEY, ""),

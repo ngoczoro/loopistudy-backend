@@ -20,6 +20,7 @@ describe("loadConfig", () => {
       keepAlive: "30m",
       concurrency: 1,
       maxQueue: 3,
+      warmUp: true,
     });
     expect(config.openai).toEqual({ apiKey: "", model: "gpt-4.1-mini" });
   });

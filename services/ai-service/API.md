@@ -51,7 +51,7 @@ Mọi lỗi đều có cùng dạng:
 | 502 | `INVALID_MODEL_OUTPUT` | Model trả về nội dung không phải JSON hợp lệ (`/v1/llm/json`) |
 | 503 | `PROVIDER_NOT_CONFIGURED` | Provider được yêu cầu chưa được cấu hình (ví dụ `OLLAMA_URL` trống, thiếu `OPENAI_API_KEY`) |
 | 503 | `MODEL_NOT_READY` | Model embedding đang được nạp hoặc nạp thất bại |
-| 503 | `QUEUE_FULL` | Hàng đợi Ollama đã đầy (giai đoạn 5). Có kèm header `Retry-After` (giây) |
+| 503 | `QUEUE_FULL` | Hàng đợi Ollama đã đầy, hoặc ước lượng thời gian chờ không vừa `timeoutMs` (xem "Hàng đợi Ollama"). Có kèm header `Retry-After` (giây) |
 | 504 | `PROVIDER_TIMEOUT` | Provider không trả lời trong `timeoutMs` |
 | 500 | `INTERNAL` | Lỗi khác |
 
@@ -72,7 +72,7 @@ Không cần khóa. Dùng cho Docker healthcheck và để kiểm tra nhanh. Lu�
   "embedding": { "status": "ready", "model": "Xenova/multilingual-e5-small" },
   "ollama": { "status": "up", "model": "qwen2.5:3b" },
   "openai": { "configured": true, "model": "gpt-4.1-mini" },
-  "queue": { "running": 1, "waiting": 2, "concurrency": 1, "maxWaiting": 3, "avgWaitMs": 4200 }
+  "queue": { "running": 1, "waiting": 1, "concurrency": 1, "maxWaiting": 3, "avgWaitMs": 11919, "avgRunMs": 21603 }
 }
 ```
 
@@ -82,7 +82,7 @@ Không cần khóa. Dùng cho Docker healthcheck và để kiểm tra nhanh. Lu�
 | `embedding.status` | `idle` (chưa nạp: trước giai đoạn 2, hoặc khi `EMBEDDING_PRELOAD=false` và chưa có lần gọi nào), `loading`, `ready` hoặc `failed` |
 | `embedding.model` | Model **đang thực sự được dùng**. Có thể là model dự phòng MiniLM nếu e5 nạp lỗi |
 | `ollama.status` | `up`, `down` hoặc `disabled` (khi `OLLAMA_URL` trống). Lấy từ lần kiểm tra gần nhất, kết quả được lưu lại khoảng 10 giây |
-| `queue` | Chỉ có từ giai đoạn 5 |
+| `queue` | Hàng đợi Ollama: số yêu cầu đang chạy và đang chờ, thời gian chờ trung bình của 20 lần gần nhất, thời gian chạy trung bình (`null` khi chưa có lần nào chạy xong) |
 
 ## `GET /info`
 
@@ -215,6 +215,18 @@ data: {"durationMs":21000,"tokens":142}
 
 ---
 
+## Hàng đợi Ollama
+
+Máy chạy Ollama bằng CPU chỉ trả lời được một yêu cầu một lúc, mỗi câu mất khoảng 15–45 giây. Vì vậy, mọi yêu cầu tới Ollama (`/v1/llm/*` với `provider: "ollama"`) đều phải xếp hàng trong service. OpenAI không cần hàng đợi.
+
+- **Số yêu cầu chạy cùng lúc:** `OLLAMA_CONCURRENCY`, mặc định 1.
+- **Ưu tiên:** `x-priority: chat` (Ask AI, có người đang chờ trên màn hình) được xếp trước `study` (quiz, flashcard). Hai yêu cầu cùng mức ưu tiên thì ai đến trước được phục vụ trước.
+- **Từ chối ngay khi không kịp:** service ước lượng thời gian chờ bằng cách lấy số yêu cầu đứng trước, chia cho `OLLAMA_CONCURRENCY`, nhân với thời gian chạy trung bình (mặc định 30 giây khi chưa có số liệu). Nếu ước lượng ≥ `timeoutMs` của yêu cầu, service trả `QUEUE_FULL` **ngay**, và backend chuyển sang OpenAI mà không phải chờ hết thời gian.
+- **Giới hạn cứng:** khi đã có `OLLAMA_MAX_QUEUE` yêu cầu đang chờ, yêu cầu mới bị trả `QUEUE_FULL`.
+- **Thời gian chờ được tính vào `timeoutMs`:** chờ quá `timeoutMs` thì trả `PROVIDER_TIMEOUT`. Nếu đã vào lượt, service chỉ còn phần thời gian chưa dùng cho cuộc gọi tới Ollama.
+- Backend ngắt kết nối trong lúc đang chờ thì yêu cầu được rút khỏi hàng.
+- Với stream, yêu cầu giữ lượt cho tới token cuối cùng.
+
 ## Biến môi trường
 
 ### Backend (`loopistudy-backend/.env`)
@@ -238,7 +250,8 @@ data: {"durationMs":21000,"tokens":142}
 | `OLLAMA_MODEL` | `qwen2.5:3b` | |
 | `OLLAMA_KEEP_ALIVE` | `30m` | |
 | `OLLAMA_CONCURRENCY` | `1` | Số yêu cầu Ollama chạy cùng lúc (giai đoạn 5) |
-| `OLLAMA_MAX_QUEUE` | `3` | Số yêu cầu chờ tối đa. Vượt quá thì trả `QUEUE_FULL` (giai đoạn 5) |
+| `OLLAMA_MAX_QUEUE` | `3` | Số yêu cầu chờ tối đa. Vượt quá thì trả `QUEUE_FULL` |
+| `OLLAMA_WARMUP` | `true` | Nạp model Ollama vào bộ nhớ khi service khởi động |
 | `OPENAI_API_KEY` | trống | Để trống để tắt OpenAI |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | |
 | `LOG_LEVEL` | `info` | |

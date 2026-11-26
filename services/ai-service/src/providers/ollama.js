@@ -65,6 +65,27 @@ export const createOllama = (config, { fetchImpl = (...args) => globalThis.fetch
   return {
     model: config.ollama.model,
 
+    /**
+     * Loads the model into memory (a generate call with no prompt) so the first real question
+     * does not also pay for loading it. `{ ok, ms }`; never throws.
+     */
+    async warmUp({ timeoutMs = 120_000 } = {}) {
+      if (!config.ollama.url) return { ok: false, ms: 0, error: "disabled" };
+      const started = Date.now();
+      try {
+        const response = await fetchImpl(`${config.ollama.url}/api/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: config.ollama.model, keep_alive: config.ollama.keepAlive }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        await response.text().catch(() => "");
+        return { ok: response.ok, ms: Date.now() - started, error: response.ok ? null : `HTTP ${response.status}` };
+      } catch (error) {
+        return { ok: false, ms: Date.now() - started, error: error.message };
+      }
+    },
+
     async json({ system, user, schema, maxTokens, temperature, timeoutMs, signal }) {
       const data = await once({
         body: {

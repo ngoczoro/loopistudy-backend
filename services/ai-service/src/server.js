@@ -5,6 +5,7 @@ import { createEmbedder } from "./embedding.js";
 import { createOllama } from "./providers/ollama.js";
 import { createOpenAI } from "./providers/openai.js";
 import { createLogger } from "./logger.js";
+import { createQueue, withQueue } from "./queue.js";
 import { createStatus } from "./status.js";
 
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -20,16 +21,31 @@ try {
 const logger = createLogger(config.logLevel);
 const status = createStatus(config);
 const embedder = createEmbedder(config, { status, logger });
-const providers = { ollama: createOllama(config), openai: createOpenAI(config) };
-const app = createApp({ config, logger, status, embedder, providers });
+// Ollama on one CPU answers one request at a time: every call waits its turn here.
+// OpenAI needs no queue.
+const ollamaQueue = createQueue({
+  concurrency: config.ollama.concurrency,
+  maxWaiting: config.ollama.maxQueue,
+});
+const ollama = createOllama(config);
+const providers = { ollama: withQueue(ollama, ollamaQueue), openai: createOpenAI(config) };
+const app = createApp({ config, logger, status, embedder, providers, queue: ollamaQueue });
 
-// Load the model now so the first request does not wait for it (or download it).
+// Load the models now so the first request does not wait for them (or download them).
 if (config.embedding.preload) embedder.preload();
+if (config.ollama.url && config.ollama.warmUp) {
+  ollama.warmUp().then(({ ok, ms, error }) =>
+    ok
+      ? logger.info(`Ollama model ${config.ollama.model} loaded (${ms}ms)`)
+      : logger.warn(`Ollama warm-up failed: ${error}`),
+  );
+}
 
 const server = app.listen(config.port, () => {
   logger.info(`AI service listening on http://localhost:${config.port}`);
   logger.info(
-    `Ollama: ${config.ollama.url || "disabled"} (${config.ollama.model}) · ` +
+    `Ollama: ${config.ollama.url || "disabled"} (${config.ollama.model}, ` +
+      `${config.ollama.concurrency} at a time, up to ${config.ollama.maxQueue} waiting) · ` +
       `OpenAI: ${config.openai.apiKey ? config.openai.model : "disabled"}`,
   );
 });

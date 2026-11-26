@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 /** GET /health: open (no key), always 200 while the process is alive. See API.md. */
-export const healthRouter = ({ status, startedAt = Date.now() }) => {
+export const healthRouter = ({ status, queue = null, startedAt = Date.now() }) => {
   const router = Router();
   router.get("/health", async (_req, res) => {
     const snapshot = await status.snapshot();
@@ -11,6 +11,7 @@ export const healthRouter = ({ status, startedAt = Date.now() }) => {
       embedding: snapshot.embedding,
       ollama: snapshot.ollama,
       openai: snapshot.openai,
+      ...(queue ? { queue: queue.stats() } : {}),
     });
   });
   return router;

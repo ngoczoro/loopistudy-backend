@@ -58,6 +58,9 @@ const readJsonRequest = (body = {}) => {
 // Ask AI's settings in the backend: Ollama num_predict 512, temperature 0.2.
 const readChatRequest = (body = {}) => readCommon(body, { maxTokens: 512, temperature: 0.2 });
 
+/** `x-priority: chat` (Ask AI) goes ahead of `study` (the default) in the Ollama queue. */
+const priorityOf = (req) => (req.get("x-priority") === "chat" ? "chat" : "study");
+
 const sendEvent = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
 /** Aborts when the backend closes the connection before the answer is sent. */
@@ -81,6 +84,7 @@ export const llmRouter = ({ providers }) => {
     const started = Date.now();
     const { model, json } = await providers[request.provider].json({
       ...request,
+      priority: priorityOf(req),
       signal: abortOnClose(req, res),
     });
     res.json({ provider: request.provider, model, json, durationMs: Date.now() - started });
@@ -91,6 +95,7 @@ export const llmRouter = ({ providers }) => {
     const started = Date.now();
     const { model, content } = await providers[request.provider].chat({
       ...request,
+      priority: priorityOf(req),
       signal: abortOnClose(req, res),
     });
     res.json({ provider: request.provider, model, content, durationMs: Date.now() - started });
@@ -109,7 +114,7 @@ export const llmRouter = ({ providers }) => {
     let tokens = 0;
 
     try {
-      for await (const text of provider.stream({ ...request, signal })) {
+      for await (const text of provider.stream({ ...request, priority: priorityOf(req), signal })) {
         if (tokens === 0) {
           res.status(200).set({
             "Content-Type": "text/event-stream; charset=utf-8",
