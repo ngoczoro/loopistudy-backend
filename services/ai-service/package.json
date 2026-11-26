@@ -1,0 +1,28 @@
+{
+  "name": "loopistudy-ai-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Loopi Study AI service: embeddings and the Ollama/OpenAI gateway (see API.md)",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {}
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
