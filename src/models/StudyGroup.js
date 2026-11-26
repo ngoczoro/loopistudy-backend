@@ -39,6 +39,36 @@ export const defineStudyGroupModel = (sequelize) => {
         allowNull: false,
         field: "owner_id",
       },
+      backupMeetUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "backup_meet_url",
+      },
+      activeMeetUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "active_meet_url",
+      },
+      activeMeetBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "active_meet_by",
+      },
+      activeMeetAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "active_meet_at",
+      },
+      callStartedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "call_started_at",
+      },
+      callStartedBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "call_started_by",
+      },
     },
     modelOptions("study_groups", { paranoid: true }),
   );

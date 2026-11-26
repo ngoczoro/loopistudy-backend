@@ -18,6 +18,7 @@ import {
   getOwnerMembershipOrThrow,
 } from "./groups.access.js";
 import { serializeGroup, serializeMember } from "./groups.serializer.js";
+import { normalizeMeetUrl } from "../calls/calls.meet.js";
 import {
   GROUP_AVATAR_FOLDER,
   GROUP_ROLE,
@@ -137,6 +138,21 @@ export const updateGroup = async (userId, groupId, payload, avatarFile) => {
     if (payload.name !== undefined) changes.name = String(payload.name).trim();
     const description = normalizeDescription(payload.description);
     if (description !== undefined) changes.description = description;
+
+    if (payload.backupMeetUrl !== undefined) {
+      const raw = String(payload.backupMeetUrl ?? "").trim();
+      if (!raw) {
+        changes.backupMeetUrl = null;
+      } else {
+        const url = normalizeMeetUrl(raw);
+        if (!url) {
+          throw ApiError.badRequest(
+            "Link phải là Google Meet, ví dụ https://meet.google.com/abc-defg-hij.",
+          );
+        }
+        changes.backupMeetUrl = url;
+      }
+    }
 
     if (avatarFile) {
       const uploaded = await uploadImageToCloudinary(avatarFile, {

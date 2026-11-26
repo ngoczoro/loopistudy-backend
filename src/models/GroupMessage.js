@@ -25,6 +25,16 @@ export const defineGroupMessageModel = (sequelize) => {
         allowNull: false,
         defaultValue: "",
       },
+      // "text" (written by a member), or "call_started" / "call_ended" / "meet" (posted by calls).
+      kind: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "text",
+      },
+      metadata: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
     },
     modelOptions("group_messages"),
   );

@@ -24,6 +24,9 @@ export const serializeGroup = (membership, extras = {}) => {
     description: group.description ?? null,
     avatarUrl: group.avatarUrl ?? null,
     inviteCode: group.inviteCode,
+    backupMeetUrl: group.backupMeetUrl ?? null,
+    /** A Loopi call is running in the group (green dot in the group list). */
+    callActive: Boolean(group.callStartedAt),
     owner: serializeUserSummary(group.owner),
     myRole: membership.role,
     memberCount: extras.memberCount ?? 0,
